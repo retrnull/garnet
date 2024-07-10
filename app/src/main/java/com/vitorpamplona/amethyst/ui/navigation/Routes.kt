@@ -233,6 +233,12 @@ sealed class Route(
             icon = R.drawable.ic_settings,
         )
 
+    object Monero :
+        Route(
+            route = "Monero",
+            icon = R.drawable.monero,
+        )
+
     companion object {
         val InvertedLayouts =
             setOf(

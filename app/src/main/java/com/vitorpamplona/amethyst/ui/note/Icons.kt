@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Clear
@@ -68,6 +69,7 @@ import com.vitorpamplona.amethyst.commons.hashtags.Amethyst
 import com.vitorpamplona.amethyst.commons.hashtags.Cashu
 import com.vitorpamplona.amethyst.commons.hashtags.CustomHashTagIcons
 import com.vitorpamplona.amethyst.ui.theme.BitcoinOrange
+import com.vitorpamplona.amethyst.ui.theme.MoneroOrange
 import com.vitorpamplona.amethyst.ui.theme.Size18Modifier
 import com.vitorpamplona.amethyst.ui.theme.Size20Modifier
 import com.vitorpamplona.amethyst.ui.theme.Size30Modifier
@@ -206,6 +208,16 @@ fun ZappedIcon(modifier: Modifier) {
     ZapIcon(modifier = modifier, BitcoinOrange)
 }
 
+@Composable
+fun MoneroIcon(modifier: Modifier) {
+    TipIcon(modifier = modifier, MoneroOrange, contentDescriptor = null)
+}
+
+@Composable
+fun TippedIcon(modifier: Modifier) {
+    TipIcon(modifier = modifier, MoneroOrange)
+}
+
 @Preview
 @Composable
 fun ReactionRowIconPreview() {
@@ -215,6 +227,8 @@ fun ReactionRowIconPreview() {
         LikeIcon(Size20Modifier, Color.Unspecified)
         ZapIcon(Size20Modifier)
         ZappedIcon(Size20Modifier)
+        TipIcon(Size20Modifier)
+        TippedIcon(Size20Modifier)
     }
 }
 
@@ -227,6 +241,20 @@ fun ZapIcon(
     Icon(
         imageVector = Icons.Default.Bolt,
         contentDescription = stringResource(contentDescriptor),
+        tint = tint,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun TipIcon(
+    modifier: Modifier,
+    tint: Color = Color.Unspecified,
+    contentDescriptor: Int? = R.string.tip_description,
+) {
+    Icon(
+        painter = painterResource(R.drawable.monero),
+        contentDescription = contentDescriptor?.let { stringResource(it) },
         tint = tint,
         modifier = modifier,
     )
@@ -532,6 +560,43 @@ fun IncognitoIconOff(
 }
 
 @Composable
+fun TipSplitIcon(
+    tint: Color = MoneroOrange,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier
+            .height(20.dp)
+            .width(32.dp),
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.monero),
+            contentDescription = stringResource(id = R.string.monero_tips),
+            modifier =
+                Modifier
+                    .size(20.dp)
+                    .align(Alignment.CenterStart),
+            tint = tint,
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
+            contentDescription = stringResource(id = R.string.monero_tips),
+            modifier =
+                Modifier
+                    .size(13.dp)
+                    .align(Alignment.CenterEnd),
+            tint = tint,
+        )
+    }
+}
+
+@Preview
+@Composable
+fun TipSplitIconPreview() {
+    TipSplitIcon()
+}
+
+@Composable
 fun ZapSplitIcon(
     modifier: Modifier = Size20Modifier,
     tint: Color = BitcoinOrange,
@@ -549,18 +614,26 @@ fun ZapSplitIcon(
 fun ZapSplitPreview() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.height(20.dp).width(25.dp),
+            Modifier
+                .height(20.dp)
+                .width(25.dp),
         ) {
             Icon(
                 imageVector = Icons.Outlined.Bolt,
                 contentDescription = stringResource(id = R.string.zaps),
-                modifier = Modifier.size(20.dp).align(Alignment.CenterStart),
+                modifier =
+                    Modifier
+                        .size(20.dp)
+                        .align(Alignment.CenterStart),
                 tint = BitcoinOrange,
             )
             Icon(
                 imageVector = Icons.Outlined.ArrowForwardIos,
                 contentDescription = stringResource(id = R.string.zaps),
-                modifier = Modifier.size(13.dp).align(Alignment.CenterEnd),
+                modifier =
+                    Modifier
+                        .size(13.dp)
+                        .align(Alignment.CenterEnd),
                 tint = BitcoinOrange,
             )
         }

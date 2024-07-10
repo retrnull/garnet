@@ -58,6 +58,7 @@ import com.vitorpamplona.amethyst.ui.note.ClickableUserPicture
 import com.vitorpamplona.amethyst.ui.note.LikeReaction
 import com.vitorpamplona.amethyst.ui.note.NoteAuthorPicture
 import com.vitorpamplona.amethyst.ui.note.NoteUsernameDisplay
+import com.vitorpamplona.amethyst.ui.note.TipReaction
 import com.vitorpamplona.amethyst.ui.note.UsernameDisplay
 import com.vitorpamplona.amethyst.ui.note.ZapReaction
 import com.vitorpamplona.amethyst.ui.note.elements.DisplayUncitedHashtags
@@ -341,6 +342,13 @@ private fun ShortCommunityActionOptions(
     )
     Spacer(modifier = StdHorzSpacer)
     ZapReaction(
+        baseNote = note,
+        grayTint = MaterialTheme.colorScheme.onSurface,
+        accountViewModel = accountViewModel,
+        nav = nav,
+    )
+    Spacer(modifier = StdHorzSpacer)
+    TipReaction(
         baseNote = note,
         grayTint = MaterialTheme.colorScheme.onSurface,
         accountViewModel = accountViewModel,

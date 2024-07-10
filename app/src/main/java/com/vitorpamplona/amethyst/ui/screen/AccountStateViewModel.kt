@@ -23,6 +23,7 @@ package com.vitorpamplona.amethyst.ui.screen
 import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
 import com.vitorpamplona.amethyst.AccountInfo
 import com.vitorpamplona.amethyst.LocalPreferences
@@ -48,6 +49,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -69,7 +71,14 @@ class AccountStateViewModel() : ViewModel() {
 
     private suspend fun tryLoginExistingAccount() =
         withContext(Dispatchers.IO) {
-            LocalPreferences.loadCurrentAccountFromEncryptedStorage()?.let { startUI(it) } ?: run { requestLoginUI() }
+            LocalPreferences.loadCurrentAccountFromEncryptedStorage()?.let {
+                it.startMonero()
+                // wait for the wallet to be set before starting the UI
+                val accountFlow = it.live.asFlow()
+                accountFlow.first { it.account.moneroWallet != null }
+
+                startUI(it)
+            } ?: run { requestLoginUI() }
         }
 
     private suspend fun requestLoginUI() {
@@ -156,13 +165,21 @@ class AccountStateViewModel() : ViewModel() {
 
         LocalPreferences.updatePrefsForLogin(account)
 
-        startUI(account)
+        account.startMonero()
+        // wait for the wallet to be set before starting the UI
+        val accountFlow = account.live.asFlow()
+        accountFlow.first { it.account.moneroWallet != null }
+
+        startUI(account) {
+            account.sendNewUserMetadata()
+        }
     }
 
     suspend fun startUI(
         account: Account,
         onServicesReady: (() -> Unit)? = null,
     ) = withContext(Dispatchers.Main) {
+        prepareLogoutOrSwitch()
         if (account.isWriteable()) {
             _accountContent.update { AccountState.LoggedIn(account) }
         } else {
@@ -292,6 +309,12 @@ class AccountStateViewModel() : ViewModel() {
 
             // saves to local preferences
             LocalPreferences.updatePrefsForLogin(account)
+
+            account.startMonero()
+            // wait for the wallet to be set before starting the UI
+            val accountFlow = account.live.asFlow()
+            accountFlow.first { it.account.moneroWallet != null }
+
             startUI(account) {
                 account.userProfile().latestContactList?.let { Client.send(it) }
                 account.sendNewUserMetadata(name = name)
@@ -301,7 +324,6 @@ class AccountStateViewModel() : ViewModel() {
 
     fun switchUser(accountInfo: AccountInfo) {
         viewModelScope.launch(Dispatchers.IO) {
-            prepareLogoutOrSwitch()
             LocalPreferences.switchToAccount(accountInfo)
             tryLoginExistingAccount()
         }
@@ -309,7 +331,6 @@ class AccountStateViewModel() : ViewModel() {
 
     fun logOff(accountInfo: AccountInfo) {
         viewModelScope.launch(Dispatchers.IO) {
-            prepareLogoutOrSwitch()
             LocalPreferences.updatePrefsForLogout(accountInfo)
             tryLoginExistingAccount()
         }

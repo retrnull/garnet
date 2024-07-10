@@ -83,6 +83,7 @@ import com.vitorpamplona.amethyst.ui.screen.ScrollStateKeys
 import com.vitorpamplona.amethyst.ui.screen.SharedPreferencesViewModel
 import com.vitorpamplona.amethyst.ui.theme.BitcoinOrange
 import com.vitorpamplona.amethyst.ui.theme.DividerThickness
+import com.vitorpamplona.amethyst.ui.theme.MoneroOrange
 import com.vitorpamplona.amethyst.ui.theme.RoyalBlue
 import com.vitorpamplona.amethyst.ui.theme.chartStyle
 import java.math.BigDecimal
@@ -182,7 +183,7 @@ fun SummaryBar(model: UserReactionsViewModel) {
         val lineChartCount =
             lineChart(
                 lines =
-                    listOf(RoyalBlue, Color.Green, Color.Red).map { lineChartColor ->
+                    listOf(RoyalBlue, Color.Green, Color.Red, MoneroOrange).map { lineChartColor ->
                         LineChart.LineSpec(
                             lineColor = lineChartColor.toArgb(),
                             lineBackgroundShader =

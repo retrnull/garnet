@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.jetbrainsKotlinAndroid)
-    alias(libs.plugins.googleServices)
 }
 
 android {
@@ -12,8 +11,8 @@ android {
         applicationId "com.vitorpamplona.amethyst"
         minSdk 26
         targetSdk 34
-        versionCode 368
-        versionName "0.86.5"
+        versionCode 1
+        versionName "0.1"
         buildConfigField "String", "RELEASE_NOTES_ID", "\"a704a11334ed4fe6fc6ee6f8856f6f005da33644770616f1437f8b2b488b52b1\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -85,6 +84,12 @@ android {
             'zh-rSG',
             'zh-rTW'
         ]
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++11"
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
     }
 
     buildTypes {
@@ -105,16 +110,32 @@ android {
         }
     }
 
-    flavorDimensions = ["channel"]
+    flavorDimensions = ["net", "channel"]
 
     productFlavors {
-        play {
+        mainnet {
             getIsDefault().set(true)
+            dimension "net"
+        }
+
+        stagenet {
+            dimension "net"
+            applicationIdSuffix '.stage'
+        }
+
+        play {
             dimension "channel"
         }
 
         fdroid {
+            getIsDefault().set(true)
             dimension "channel"
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
         }
     }
 
@@ -122,7 +143,7 @@ android {
         abi {
             enable true
             reset()
-            include "x86", "x86_64", "arm64-v8a", "armeabi-v7a"
+            include "x86_64", "arm64-v8a", "armeabi-v7a"
             universalApk true
         }
     }
@@ -215,6 +236,8 @@ dependencies {
 
     // important for proxy / tor
     implementation libs.androidx.media3.datasource.okhttp
+
+    implementation libs.androidx.work.runtime.ktx
 
     // Load images from the web.
     implementation libs.coil.compose

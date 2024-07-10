@@ -20,7 +20,12 @@
  */
 package com.vitorpamplona.amethyst.model
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.content.res.Resources
+import android.os.IBinder
 import android.util.Log
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -30,19 +35,25 @@ import androidx.lifecycle.asFlow
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.liveData
 import androidx.lifecycle.switchMap
+import com.google.common.net.HostAndPort
 import com.vitorpamplona.amethyst.Amethyst
 import com.vitorpamplona.amethyst.BuildConfig
 import com.vitorpamplona.amethyst.service.FileHeader
+import com.vitorpamplona.amethyst.service.MoneroDataSource
 import com.vitorpamplona.amethyst.service.Nip96MediaServers
 import com.vitorpamplona.amethyst.service.NostrLnZapPaymentResponseDataSource
+import com.vitorpamplona.amethyst.service.WalletService
 import com.vitorpamplona.amethyst.service.checkNotInMainThread
 import com.vitorpamplona.amethyst.service.relays.Client
 import com.vitorpamplona.amethyst.service.relays.Constants
 import com.vitorpamplona.amethyst.service.relays.FeedType
 import com.vitorpamplona.amethyst.service.relays.Relay
 import com.vitorpamplona.amethyst.ui.components.BundledUpdate
+import com.vitorpamplona.amethyst.ui.screen.loggedIn.TransactionPriority
+import com.vitorpamplona.quartz.crypto.CryptoUtils
 import com.vitorpamplona.quartz.crypto.KeyPair
 import com.vitorpamplona.quartz.encoders.ATag
+import com.vitorpamplona.quartz.encoders.Hex
 import com.vitorpamplona.quartz.encoders.HexKey
 import com.vitorpamplona.quartz.encoders.Nip47WalletConnect
 import com.vitorpamplona.quartz.encoders.hexToByteArray
@@ -93,6 +104,8 @@ import com.vitorpamplona.quartz.events.SealedGossipEvent
 import com.vitorpamplona.quartz.events.StatusEvent
 import com.vitorpamplona.quartz.events.TextNoteEvent
 import com.vitorpamplona.quartz.events.TextNoteModificationEvent
+import com.vitorpamplona.quartz.events.TipEvent
+import com.vitorpamplona.quartz.events.TipSplitSetup
 import com.vitorpamplona.quartz.events.WrappedEvent
 import com.vitorpamplona.quartz.events.ZapSplitSetup
 import com.vitorpamplona.quartz.signers.NostrSigner
@@ -115,7 +128,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combineTransform
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flattenMerge
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
@@ -124,6 +136,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
+import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.Locale
 import java.util.UUID
@@ -150,6 +163,8 @@ val DefaultReactions =
 
 val DefaultZapAmounts = listOf(500L, 1000L, 5000L)
 
+val DefaultTipAmounts = listOf("0.05", "0.1", "0.5")
+
 fun getLanguagesSpokenByUser(): Set<String> {
     val languageList = ConfigurationCompat.getLocales(Resources.getSystem().getConfiguration())
     val codedList = mutableSetOf<String>()
@@ -169,14 +184,24 @@ val KIND3_FOLLOWS =
 @Stable
 class Account(
     val keyPair: KeyPair,
+    var moneroSpendKey: String? = null,
+    var moneroSeed: String? = null,
+    var moneroPassword: String? = null,
+    var moneroDaemonAddress: HostAndPort = Constants.defaultMoneroDaemon,
+    var moneroDaemonUsername: String = "",
+    var moneroDaemonPassword: String = "",
+    var isMoneroSeedBackedUp: Boolean = false,
     val signer: NostrSigner = NostrSignerInternal(keyPair),
     var localRelays: Set<RelaySetupInfo> = Constants.defaultRelays.toSet(),
     var dontTranslateFrom: Set<String> = getLanguagesSpokenByUser(),
     var languagePreferences: Map<String, String> = mapOf(),
     var translateTo: String = Locale.getDefault().language,
     var zapAmountChoices: List<Long> = DefaultZapAmounts,
+    var tipAmountChoices: List<String> = DefaultTipAmounts,
     var reactionChoices: List<String> = DefaultReactions,
     var defaultZapType: LnZapEvent.ZapType = LnZapEvent.ZapType.PUBLIC,
+    var defaultTipType: TipEvent.TipType = TipEvent.TipType.PRIVATE,
+    var defaultMoneroTransactionPriority: TransactionPriority = TransactionPriority.UNIMPORTANT,
     var defaultFileServer: Nip96MediaServers.ServerName = Nip96MediaServers.DEFAULT[0],
     var defaultHomeFollowList: MutableStateFlow<String> = MutableStateFlow(KIND3_FOLLOWS),
     var defaultStoriesFollowList: MutableStateFlow<String> = MutableStateFlow(GLOBAL_FOLLOWS),
@@ -540,6 +565,7 @@ class Account(
             nip05 = nip05,
             lnAddress = lnAddress,
             lnURL = lnURL,
+            moneroAddress = moneroAddress,
             twitter = twitter,
             mastodon = mastodon,
             github = github,
@@ -697,6 +723,10 @@ class Account(
         onWasZapped: () -> Unit,
     ) {
         zappedNote?.isZappedBy(userProfile(), this, onWasZapped)
+    }
+
+    fun noteWasTippedByAccount(note: Note): Boolean {
+        return note.isTippedBy(userProfile())
     }
 
     fun calculateZappedAmount(
@@ -1271,6 +1301,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
+        tipReceiver: List<TipSplitSetup>? = null,
         relayList: List<Relay>? = null,
         geohash: String? = null,
         nip94attachments: List<Event>? = null,
@@ -1298,6 +1329,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
+            tipReceiver = tipReceiver,
             directMentions = directMentions,
             geohash = geohash,
             nip94attachments = nip94attachments,
@@ -1335,6 +1367,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
+        tipReceiver: List<TipSplitSetup>? = null,
         replyingTo: String?,
         root: String?,
         directMentions: Set<HexKey>,
@@ -1359,6 +1392,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
+            tipReceiver = tipReceiver,
             replyingTo = replyingTo,
             root = root,
             directMentions = directMentions,
@@ -1419,6 +1453,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
+        tipReceiver: List<TipSplitSetup>? = null,
         replyingTo: String?,
         root: String?,
         directMentions: Set<HexKey>,
@@ -1443,6 +1478,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
+            tipReceiver = tipReceiver,
             replyingTo = replyingTo,
             root = root,
             directMentions = directMentions,
@@ -1577,6 +1613,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
+        tipReceiver: List<TipSplitSetup>? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String?,
@@ -1594,6 +1631,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
+            tipReceiver = tipReceiver,
             geohash = geohash,
             nip94attachments = nip94attachments,
             signer = signer,
@@ -1623,6 +1661,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
+        tipReceiver: List<TipSplitSetup>? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String?,
@@ -1641,6 +1680,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
+            tipReceiver = tipReceiver,
             geohash = geohash,
             nip94attachments = nip94attachments,
             signer = signer,
@@ -1670,6 +1710,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
+        tipReceiver: List<TipSplitSetup>? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String?,
@@ -1682,6 +1723,7 @@ class Account(
             zapReceiver,
             wantsToMarkAsSensitive,
             zapRaiserAmount,
+            tipReceiver,
             geohash,
             nip94attachments,
             draftTag,
@@ -1696,6 +1738,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
+        tipReceiver: List<TipSplitSetup>? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String?,
@@ -1714,6 +1757,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
+            tipReceiver = tipReceiver,
             geohash = geohash,
             nip94attachments = nip94attachments,
             signer = signer,
@@ -1745,6 +1789,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
+        tipReceiver: List<TipSplitSetup>? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String? = null,
@@ -1763,6 +1808,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
+            tipReceiver = tipReceiver,
             geohash = geohash,
             nip94attachments = nip94attachments,
             draftTag = draftTag,
@@ -2200,6 +2246,18 @@ class Account(
         saveable.invalidateData()
     }
 
+    fun changeDefaultTipType(tipType: TipEvent.TipType) {
+        defaultTipType = tipType
+        saveable.invalidateData()
+        live.invalidateData()
+    }
+
+    fun changeDefaultMoneroTransactionPriority(priority: TransactionPriority) {
+        defaultMoneroTransactionPriority = priority
+        saveable.invalidateData()
+        live.invalidateData()
+    }
+
     fun changeDefaultFileServer(server: Nip96MediaServers.ServerName) {
         defaultFileServer = server
         live.invalidateData()
@@ -2232,6 +2290,12 @@ class Account(
 
     fun changeZapAmounts(newAmounts: List<Long>) {
         zapAmountChoices = newAmounts
+        live.invalidateData()
+        saveable.invalidateData()
+    }
+
+    fun changeTipAmounts(newAmounts: List<String>) {
+        tipAmountChoices = newAmounts
         live.invalidateData()
         saveable.invalidateData()
     }
@@ -2605,6 +2669,330 @@ class Account(
                 GlobalScope.launch(Dispatchers.IO) { LocalCache.consume(it) }
             }
         }
+
+        keyPair.privKey?.let {
+            if (moneroSpendKey.isNullOrEmpty()) {
+                changeMoneroSpendKey(CryptoUtils.privateKeyToSpendKey(it))
+            }
+        }
+        if (moneroPassword.isNullOrEmpty()) {
+            changeMoneroPassword(Hex.encode(CryptoUtils.random(32)))
+        }
+    }
+
+    fun changeMoneroSpendKey(spendKey: String) {
+        moneroSpendKey = spendKey
+        saveable.invalidateData()
+    }
+
+    fun changeMoneroSeed(seed: String) {
+        moneroSeed = seed
+        saveable.invalidateData()
+    }
+
+    fun changeMoneroPassword(password: String) {
+        moneroPassword = password
+        saveable.invalidateData()
+    }
+
+    fun changeMoneroDaemonAddress(address: HostAndPort) {
+        moneroDaemonAddress = address
+        saveable.invalidateData()
+        live.invalidateData()
+    }
+
+    fun changeMoneroDaemonUsername(username: String) {
+        moneroDaemonUsername = username
+        saveable.invalidateData()
+        live.invalidateData()
+    }
+
+    fun changeMoneroDaemonPassword(password: String) {
+        moneroDaemonPassword = password
+        saveable.invalidateData()
+        live.invalidateData()
+    }
+
+    private fun changeMoneroWallet(wallet: Wallet?) {
+        moneroWallet = wallet
+        live.invalidateData()
+    }
+
+    fun changeIsMoneroSeedBackedUp(value: Boolean) {
+        isMoneroSeedBackedUp = value
+        saveable.invalidateData()
+        live.invalidateData()
+    }
+
+    var moneroWalletService: WalletService? = null
+    var moneroWallet: Wallet? = null
+    var moneroAddress: String = ""
+        private set
+
+    val moneroConnection =
+        object : ServiceConnection {
+            override fun onServiceConnected(
+                name: ComponentName,
+                service: IBinder,
+            ) {
+                val binder = service as WalletService.WalletBinder
+                val myMoneroWalletService = binder.getService()
+
+                MoneroDataSource.setMoneroService(myMoneroWalletService)
+                moneroWalletService = myMoneroWalletService
+
+                val scope = Amethyst.instance.applicationIOScope
+                scope.launch {
+                    startMoneroWallet()
+                }
+            }
+
+            override fun onServiceDisconnected(name: ComponentName) {
+            }
+        }
+
+    fun startMonero() {
+        if (moneroPassword.isNullOrEmpty()) {
+            return
+        }
+
+        if (!moneroSpendKey.isNullOrEmpty()) {
+            isMoneroSeedBackedUp = true
+        }
+
+        if (moneroWalletService != null) {
+            scope.launch {
+                startMoneroWallet()
+            }
+        } else {
+            val context = Amethyst.instance.applicationContext
+            val intent =
+                Intent(
+                    context,
+                    WalletService::class.java,
+                )
+            context.startService(intent)
+            context.bindService(intent, moneroConnection, Context.BIND_AUTO_CREATE)
+        }
+    }
+
+    fun startMoneroWallet() {
+        checkNotInMainThread()
+
+        val proxyString =
+            proxy?.let {
+                // monero only supports SOCKS proxies
+                if (it.type() == Proxy.Type.SOCKS) {
+                    val address = it.address() as InetSocketAddress
+                    HostAndPort.fromParts(address.hostString, address.port).toString()
+                } else {
+                    null
+                }
+            }
+
+        val myWallet =
+            moneroWalletService!!.loadWallet(
+                keyPair.pubKey.toHexKey(),
+                moneroPassword ?: "",
+                moneroSpendKey ?: "",
+                moneroDaemonAddress.toString(),
+                moneroDaemonUsername,
+                moneroDaemonPassword,
+                proxyString ?: "",
+            )
+
+        if (!myWallet.status.isOk()) {
+            Log.w("Account", "Failed to load wallet: ${myWallet.status.error}")
+            return
+        }
+
+        moneroAddress = myWallet.address
+        changeMoneroSeed(myWallet.seed)
+
+        changeMoneroWallet(myWallet)
+    }
+
+    fun stopMonero() {
+        val context = Amethyst.instance.applicationContext
+
+        val intent =
+            Intent(
+                context,
+                WalletService::class.java,
+            )
+        context.stopService(intent)
+    }
+
+    fun setMoneroProxy(proxy: String): Boolean {
+        return moneroWalletService?.setProxy(proxy) ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun newSubaddress(label: String): String {
+        return moneroWalletService?.newSubaddress(0, label) ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun lastSubaddress(): Subaddress {
+        return moneroWalletService?.lastSubaddress(0) ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun checkProof(
+        userKey: HexKey,
+        dstAddress: String,
+        txId: String,
+        proof: String,
+    ): ProofInfo? {
+        checkNotInMainThread()
+        // NOTE: userKey is the challenge
+        return moneroWalletService?.let {
+            return@checkProof it.checkTxProof(
+                txId,
+                dstAddress,
+                userKey,
+                proof,
+            )
+        } ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun moneroAddressIsValid(address: String): Boolean {
+        checkNotInMainThread()
+        return moneroWalletService?.let {
+            return@moneroAddressIsValid it.isAddressValid(address)!!
+        } ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun sendMonero(
+        address: String,
+        amount: ULong,
+        priority: TransactionPriority,
+    ): PendingTransaction.Status {
+        checkNotInMainThread()
+        return moneroWalletService?.let {
+            return it.sendTransaction(address, amount.toLong(), priority)!!
+        } ?: throw IllegalStateException("Monero service is null")
+    }
+
+    suspend fun tip(
+        tips: List<TipSplitSetup>,
+        amount: ULong,
+        priority: TransactionPriority,
+    ): PendingTransaction {
+        if (tips.isEmpty()) {
+            throw IllegalArgumentException("Expected at least one tip")
+        }
+
+        if (tips.any { !it.isAddress }) {
+            throw IllegalArgumentException("Expected only Monero addresses")
+        }
+
+        val totalWeight =
+            if (tips.any { it.weight != null }) {
+                tips.sumOf { it.weight ?: 0.0 }
+            } else {
+                1.0
+            }
+
+        if (totalWeight == 0.0) {
+            throw IllegalArgumentException("Weight must not be zero")
+        }
+
+        var transaction: PendingTransaction? = null
+        moneroWalletService?.let {
+            val destinations = mutableListOf<String>()
+            val amounts = mutableListOf<Long>()
+            tips.forEach { tip ->
+                destinations += tip.addressOrPubKeyHex
+                val weight = tip.weight?.let { it / totalWeight } ?: (totalWeight / tips.size)
+                val tipAmount = amount.toDouble() * weight
+                amounts += tipAmount.toLong()
+            }
+            transaction =
+                it.sendTransactionMultDest(
+                    destinations.toTypedArray(),
+                    amounts.toTypedArray(),
+                    priority,
+                )
+        } ?: throw IllegalStateException("Monero service is null")
+        return transaction!!
+    }
+
+    fun getProofs(
+        txId: String,
+        tips: List<TipSplitSetup>,
+        message: String,
+    ): Map<Proof, String> {
+        if (tips.any { !it.isAddress }) {
+            throw IllegalArgumentException("Expected Monero addresses only")
+        }
+
+        val proofs: MutableMap<Proof, String> = mutableMapOf()
+        moneroWalletService?.let {
+            for (tip in tips) {
+                val proof = it.getTxProof(txId, tip.addressOrPubKeyHex, message)!!
+                proofs += (proof to tip.addressOrPubKeyHex)
+            }
+        } ?: throw IllegalStateException("Monero wallet is null")
+        return proofs
+    }
+
+    fun sendTipProof(
+        tippedNote: Note? = null,
+        tippedUsers: Set<HexKey>? = null,
+        txId: String,
+        proofs: Map<String, Array<String>>,
+        tipType: TipEvent.TipType,
+        message: String,
+        signer: NostrSigner? = this.signer,
+        onReady: () -> Unit,
+    ) {
+        if (tipType == TipEvent.TipType.PRIVATE) {
+            return onReady()
+        }
+
+        if (tippedNote == null && tippedUsers == null) {
+            throw IllegalArgumentException("Either an event or a user must be specified")
+        }
+
+        if (tippedUsers != null && tippedUsers.isEmpty()) {
+            throw IllegalArgumentException("At least one user must be specified")
+        }
+
+        TipEvent.create(
+            tippedNote?.event,
+            tippedUsers ?: setOfNotNull(tippedNote?.author?.pubkeyHex).ifEmpty { return },
+            txId,
+            proofs,
+            message,
+            signer ?: this.signer,
+        ) {
+            Client.send(it)
+            LocalCache.consume(it)
+            onReady()
+        }
+    }
+
+    fun setMoneroRestoreHeight(height: Long) {
+        val proxyString =
+            proxy?.let {
+                // monero only supports SOCKS proxies
+                if (it.type() == Proxy.Type.SOCKS) {
+                    val address = it.address() as InetSocketAddress
+                    HostAndPort.fromParts(address.hostString, address.port).toString()
+                } else {
+                    null
+                }
+            }
+
+        moneroWalletService
+            ?.setRestoreHeight(
+                height,
+                keyPair.pubKey.toHexKey(),
+                moneroPassword!!,
+                moneroSpendKey!!,
+                moneroDaemonAddress.toString(),
+                moneroDaemonUsername,
+                moneroDaemonPassword,
+                proxyString ?: "",
+            ) ?: throw IllegalStateException("Monero service is null")
     }
 }
 
@@ -2626,4 +3014,5 @@ class AccountLiveData(private val account: Account) :
     }
 }
 
-@Immutable class AccountState(val account: Account)
+@Immutable
+class AccountState(val account: Account)

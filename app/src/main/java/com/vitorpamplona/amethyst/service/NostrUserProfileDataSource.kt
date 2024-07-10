@@ -20,9 +20,11 @@
  */
 package com.vitorpamplona.amethyst.service
 
+import com.vitorpamplona.amethyst.model.LocalCache
 import com.vitorpamplona.amethyst.model.User
 import com.vitorpamplona.amethyst.service.relays.COMMON_FEED_TYPES
 import com.vitorpamplona.amethyst.service.relays.JsonFilter
+import com.vitorpamplona.amethyst.service.relays.Relay
 import com.vitorpamplona.amethyst.service.relays.TypedFilter
 import com.vitorpamplona.quartz.events.AppRecommendationEvent
 import com.vitorpamplona.quartz.events.AudioHeaderEvent
@@ -31,6 +33,7 @@ import com.vitorpamplona.quartz.events.BadgeAwardEvent
 import com.vitorpamplona.quartz.events.BadgeProfilesEvent
 import com.vitorpamplona.quartz.events.BookmarkListEvent
 import com.vitorpamplona.quartz.events.ContactListEvent
+import com.vitorpamplona.quartz.events.Event
 import com.vitorpamplona.quartz.events.GenericRepostEvent
 import com.vitorpamplona.quartz.events.HighlightEvent
 import com.vitorpamplona.quartz.events.LnZapEvent
@@ -41,6 +44,7 @@ import com.vitorpamplona.quartz.events.PinListEvent
 import com.vitorpamplona.quartz.events.PollNoteEvent
 import com.vitorpamplona.quartz.events.RepostEvent
 import com.vitorpamplona.quartz.events.TextNoteEvent
+import com.vitorpamplona.quartz.events.TipEvent
 
 object NostrUserProfileDataSource : NostrDataSource("UserProfileFeed") {
     var user: User? = null
@@ -93,6 +97,18 @@ object NostrUserProfileDataSource : NostrDataSource("UserProfileFeed") {
                 filter =
                     JsonFilter(
                         kinds = listOf(LnZapEvent.KIND),
+                        tags = mapOf("p" to listOf(it.pubkeyHex)),
+                    ),
+            )
+        }
+
+    fun createUserReceivedTipsFilter() =
+        user?.let {
+            TypedFilter(
+                types = COMMON_FEED_TYPES,
+                filter =
+                    JsonFilter(
+                        kinds = listOf(TipEvent.KIND),
                         tags = mapOf("p" to listOf(it.pubkeyHex)),
                     ),
             )
@@ -173,10 +189,29 @@ object NostrUserProfileDataSource : NostrDataSource("UserProfileFeed") {
                 createFollowFilter(),
                 createFollowersFilter(),
                 createUserReceivedZapsFilter(),
+                createUserReceivedTipsFilter(),
                 createAcceptedAwardsFilter(),
                 createReceivedAwardsFilter(),
                 createBookmarksFilter(),
             )
                 .ifEmpty { null }
+    }
+
+    override fun consume(
+        event: Event,
+        relay: Relay,
+    ) {
+        if (!LocalCache.justVerify(event)) {
+            return
+        }
+
+        when (event) {
+            is TipEvent -> {
+                TipEventDataSource.consume(event)
+                return
+            }
+        }
+
+        LocalCache.justConsume(event, relay)
     }
 }

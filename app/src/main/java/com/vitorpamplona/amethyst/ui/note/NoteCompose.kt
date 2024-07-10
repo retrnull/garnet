@@ -70,6 +70,7 @@ import com.vitorpamplona.amethyst.ui.note.elements.DisplayLocation
 import com.vitorpamplona.amethyst.ui.note.elements.DisplayOts
 import com.vitorpamplona.amethyst.ui.note.elements.DisplayPoW
 import com.vitorpamplona.amethyst.ui.note.elements.DisplayReward
+import com.vitorpamplona.amethyst.ui.note.elements.DisplayTipSplits
 import com.vitorpamplona.amethyst.ui.note.elements.DisplayZapSplits
 import com.vitorpamplona.amethyst.ui.note.elements.MoreOptionsButton
 import com.vitorpamplona.amethyst.ui.note.elements.Reward
@@ -543,6 +544,12 @@ fun NoteBody(
         Spacer(modifier = HalfDoubleVertSpacer)
         DisplayZapSplits(noteEvent, false, accountViewModel, nav)
     }
+
+    val tipSplits = remember(noteEvent) { noteEvent?.hasTipSplitSetup() ?: false }
+    if (tipSplits && noteEvent != null) {
+        Spacer(modifier = HalfDoubleVertSpacer)
+        DisplayTipSplits(noteEvent, false, accountViewModel, nav)
+    }
 }
 
 @Composable
@@ -759,6 +766,12 @@ fun RenderDraft(
         if (zapSplits == true) {
             Spacer(modifier = HalfDoubleVertSpacer)
             DisplayZapSplits(it.event!!, false, accountViewModel, nav)
+        }
+
+        val tipSplits = remember(it.event) { it.event?.hasTipSplitSetup() }
+        if (tipSplits == true) {
+            Spacer(modifier = HalfDoubleVertSpacer)
+            DisplayTipSplits(it.event!!, false, accountViewModel, nav)
         }
     }
 }

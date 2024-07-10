@@ -503,6 +503,15 @@ fun ListContent(
         )
 
         NavigationRow(
+            title = "Monero",
+            icon = Route.Monero.icon,
+            tint = MaterialTheme.colorScheme.onBackground,
+            nav = nav,
+            drawerState = drawerState,
+            route = Route.Monero.route,
+        )
+
+        NavigationRow(
             title = stringResource(R.string.security_filters),
             icon = Route.BlockedUsers.icon,
             tint = MaterialTheme.colorScheme.onBackground,

@@ -59,8 +59,9 @@ fun QrCodeDrawerPreview() {
 fun QrCodeDrawer(
     contents: String,
     modifier: Modifier = Modifier,
+    margin: Float = QR_MARGIN_PX,
 ) {
-    val qrCode = remember(contents) { createQrCode(contents = contents) }
+    val qrCode = remember(contents) { createQrCode(contents = contents, margin = margin) }
 
     val foregroundColor = MaterialTheme.colorScheme.onSurface
 
@@ -73,8 +74,8 @@ fun QrCodeDrawer(
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             // Calculate the height and width of each column/row
-            val rowHeight = (size.width - QR_MARGIN_PX * 2f) / qrCode.matrix.height
-            val columnWidth = (size.width - QR_MARGIN_PX * 2f) / qrCode.matrix.width
+            val rowHeight = (size.width - margin * 2f) / qrCode.matrix.height
+            val columnWidth = (size.width - margin * 2f) / qrCode.matrix.width
 
             // Draw all of the finder patterns required by the QR spec. Calculate the ratio
             // of the number of rows/columns to the width and height
@@ -86,6 +87,7 @@ fun QrCodeDrawer(
                         height = rowHeight * FINDER_PATTERN_ROW_COUNT,
                     ),
                 color = foregroundColor,
+                margin = margin,
             )
 
             // Draw data bits (encoded data part)
@@ -97,6 +99,7 @@ fun QrCodeDrawer(
                         height = rowHeight,
                     ),
                 color = foregroundColor,
+                margin = margin,
             )
         }
     }
@@ -104,7 +107,10 @@ fun QrCodeDrawer(
 
 private typealias Coordinate = Pair<Int, Int>
 
-private fun createQrCode(contents: String): QRCode {
+private fun createQrCode(
+    contents: String,
+    margin: Float = QR_MARGIN_PX,
+): QRCode {
     require(contents.isNotEmpty())
 
     return Encoder.encode(
@@ -112,7 +118,7 @@ private fun createQrCode(contents: String): QRCode {
         ErrorCorrectionLevel.Q,
         mapOf(
             EncodeHintType.CHARACTER_SET to "UTF-8",
-            EncodeHintType.MARGIN to QR_MARGIN_PX,
+            EncodeHintType.MARGIN to margin,
             EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.Q,
         ),
     )
@@ -128,6 +134,7 @@ fun DrawScope.drawAllQrCodeDataBits(
     bytes: ByteMatrix,
     size: Size,
     color: Color,
+    margin: Float = QR_MARGIN_PX,
 ) {
     setOf(
         // data bits between top left finder pattern and top right finder pattern.
@@ -175,8 +182,8 @@ fun DrawScope.drawAllQrCodeDataBits(
                                             Rect(
                                                 offset =
                                                     Offset(
-                                                        x = QR_MARGIN_PX + x * size.width,
-                                                        y = QR_MARGIN_PX + y * size.height,
+                                                        x = margin + x * size.width,
+                                                        y = margin + y * size.height,
                                                     ),
                                                 size = size,
                                             ),
@@ -208,14 +215,15 @@ internal fun DrawScope.drawQrCodeFinders(
     sideLength: Float,
     finderPatternSize: Size,
     color: Color,
+    margin: Float = QR_MARGIN_PX,
 ) {
     setOf(
         // Draw top left finder pattern.
-        Offset(x = QR_MARGIN_PX, y = QR_MARGIN_PX),
+        Offset(x = margin, y = margin),
         // Draw top right finder pattern.
-        Offset(x = sideLength - (QR_MARGIN_PX + finderPatternSize.width), y = QR_MARGIN_PX),
+        Offset(x = sideLength - (margin + finderPatternSize.width), y = margin),
         // Draw bottom finder pattern.
-        Offset(x = QR_MARGIN_PX, y = sideLength - (QR_MARGIN_PX + finderPatternSize.height)),
+        Offset(x = margin, y = sideLength - (margin + finderPatternSize.height)),
     )
         .forEach { offset ->
             drawQrCodeFinder(

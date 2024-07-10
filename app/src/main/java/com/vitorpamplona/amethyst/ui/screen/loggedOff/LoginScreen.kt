@@ -132,6 +132,7 @@ fun LoginPage(
 ) {
     val key = remember { mutableStateOf(TextFieldValue("")) }
     var errorMessage by remember { mutableStateOf("") }
+    val showProgressDialog by remember { mutableStateOf(false) }
     val acceptedTerms = remember { mutableStateOf(!isFirstLogin) }
     var termsAcceptanceIsRequired by remember { mutableStateOf("") }
 

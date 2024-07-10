@@ -35,6 +35,7 @@ import androidx.lifecycle.map
 import androidx.lifecycle.viewModelScope
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.google.common.net.HostAndPort
 import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.ServiceManager
 import com.vitorpamplona.amethyst.commons.compose.GenericBaseCache
@@ -55,6 +56,7 @@ import com.vitorpamplona.amethyst.service.Nip05NostrAddressVerifier
 import com.vitorpamplona.amethyst.service.Nip11CachedRetriever
 import com.vitorpamplona.amethyst.service.Nip11Retriever
 import com.vitorpamplona.amethyst.service.OnlineChecker
+import com.vitorpamplona.amethyst.service.TipHandler
 import com.vitorpamplona.amethyst.service.ZapPaymentHandler
 import com.vitorpamplona.amethyst.service.checkNotInMainThread
 import com.vitorpamplona.amethyst.ui.actions.Dao
@@ -83,6 +85,7 @@ import com.vitorpamplona.quartz.events.LnZapRequestEvent
 import com.vitorpamplona.quartz.events.Participant
 import com.vitorpamplona.quartz.events.ReportEvent
 import com.vitorpamplona.quartz.events.SealedGossipEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import com.vitorpamplona.quartz.events.UserMetadata
 import com.vitorpamplona.quartz.utils.TimeUtils
 import kotlinx.collections.immutable.ImmutableList
@@ -232,6 +235,10 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
         withContext(Dispatchers.IO) {
             account.calculateIfNoteWasZappedByAccount(zappedNote) { onWasZapped(true) }
         }
+    }
+
+    fun noteWasTippedByAccount(note: Note): Boolean {
+        return account.noteWasTippedByAccount(note)
     }
 
     suspend fun calculateZapAmount(
@@ -490,6 +497,31 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
         }
     }
 
+    fun tip(
+        note: Note,
+        amount: ULong,
+        message: String,
+        context: Context,
+        onError: (String, String) -> Unit,
+        onProgress: (percent: Float) -> Unit,
+        tipType: TipEvent.TipType,
+        priority: TransactionPriority,
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            TipHandler(account)
+                .tip(
+                    note,
+                    amount,
+                    message,
+                    context,
+                    onError,
+                    onProgress,
+                    tipType,
+                    priority,
+                )
+        }
+    }
+
     fun report(
         note: Note,
         type: ReportEvent.ReportType,
@@ -700,6 +732,10 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
 
     fun defaultZapType(): LnZapEvent.ZapType {
         return account.defaultZapType
+    }
+
+    fun defaultTipType(): TipEvent.TipType {
+        return account.defaultTipType
     }
 
     @Immutable
@@ -1108,6 +1144,14 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
             account.proxy = HttpClientManager.initProxy(checked, "127.0.0.1", account.proxyPort)
             account.saveable.invalidateData()
             serviceManager?.forceRestart()
+
+            val proxyString =
+                if (checked) {
+                    HostAndPort.fromParts("127.0.0.1", portNumber.value.toInt()).toString()
+                } else {
+                    ""
+                }
+            val ret = account.setMoneroProxy(proxyString)
         }
     }
 

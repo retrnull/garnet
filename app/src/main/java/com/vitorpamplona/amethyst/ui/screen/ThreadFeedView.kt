@@ -104,6 +104,7 @@ import com.vitorpamplona.amethyst.ui.note.elements.DisplayFollowingHashtagsInPos
 import com.vitorpamplona.amethyst.ui.note.elements.DisplayLocation
 import com.vitorpamplona.amethyst.ui.note.elements.DisplayPoW
 import com.vitorpamplona.amethyst.ui.note.elements.DisplayReward
+import com.vitorpamplona.amethyst.ui.note.elements.DisplayTipSplits
 import com.vitorpamplona.amethyst.ui.note.elements.DisplayZapSplits
 import com.vitorpamplona.amethyst.ui.note.elements.ForkInformationRow
 import com.vitorpamplona.amethyst.ui.note.elements.NoteDropDownMenu
@@ -644,6 +645,12 @@ fun NoteMaster(
             if (zapSplits && noteEvent != null) {
                 Spacer(modifier = DoubleVertSpacer)
                 DisplayZapSplits(noteEvent, false, accountViewModel, nav)
+            }
+
+            val tipSplits = remember(noteEvent) { noteEvent?.hasTipSplitSetup() ?: false }
+            if (tipSplits && noteEvent != null) {
+                Spacer(modifier = DoubleVertSpacer)
+                DisplayTipSplits(noteEvent, false, accountViewModel, nav)
             }
 
             ReactionsRow(note, true, editState, accountViewModel, nav)

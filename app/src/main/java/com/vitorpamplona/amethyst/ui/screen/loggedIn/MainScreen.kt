@@ -126,7 +126,9 @@ fun MainScreen(
     val sheetState =
         rememberModalBottomSheetState(
             skipPartiallyExpanded = true,
-            confirmValueChange = { it != SheetValue.PartiallyExpanded },
+            confirmValueChange = {
+                it != SheetValue.PartiallyExpanded
+            },
         )
 
     val openSheetFunction =
@@ -249,6 +251,12 @@ fun MainScreen(
             factory = NostrChatroomListNewFeedViewModel.Factory(accountViewModel.account),
         )
 
+    val moneroViewModel: MoneroViewModel =
+        viewModel(
+            key = "MoneroViewModel",
+            factory = MoneroViewModel.Factory(accountViewModel.account),
+        )
+
     val navBottomRow =
         remember(navController) {
             { route: Route, selected: Boolean ->
@@ -346,7 +354,8 @@ fun MainScreen(
         content = {
             Scaffold(
                 modifier =
-                    Modifier.background(MaterialTheme.colorScheme.secondary)
+                    Modifier
+                        .background(MaterialTheme.colorScheme.secondary)
                         .statusBarsPadding()
                         .nestedScroll(nestedScrollConnection),
                 bottomBar = {
@@ -420,6 +429,7 @@ fun MainScreen(
                         navController = navController,
                         accountViewModel = accountViewModel,
                         sharedPreferencesViewModel = sharedPreferencesViewModel,
+                        moneroViewModel = moneroViewModel,
                     )
                 }
             }
@@ -443,6 +453,7 @@ fun MainScreen(
             AccountSwitchBottomSheet(
                 accountViewModel = accountViewModel,
                 accountStateViewModel = accountStateViewModel,
+                onSwitching = {},
             )
         }
     }

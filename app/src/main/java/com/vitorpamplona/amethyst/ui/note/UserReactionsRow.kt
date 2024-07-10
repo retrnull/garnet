@@ -62,6 +62,7 @@ import com.vitorpamplona.amethyst.service.checkNotInMainThread
 import com.vitorpamplona.amethyst.ui.components.BundledInsert
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.showAmountAxis
 import com.vitorpamplona.amethyst.ui.theme.BitcoinOrange
+import com.vitorpamplona.amethyst.ui.theme.MoneroOrange
 import com.vitorpamplona.amethyst.ui.theme.RoyalBlue
 import com.vitorpamplona.amethyst.ui.theme.Size20Modifier
 import com.vitorpamplona.amethyst.ui.theme.Size24Modifier
@@ -73,6 +74,7 @@ import com.vitorpamplona.quartz.events.GenericRepostEvent
 import com.vitorpamplona.quartz.events.LnZapEvent
 import com.vitorpamplona.quartz.events.ReactionEvent
 import com.vitorpamplona.quartz.events.RepostEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,7 +95,10 @@ fun UserReactionsRow(
 ) {
     Row(
         verticalAlignment = CenterVertically,
-        modifier = Modifier.clickable(onClick = onClick).padding(10.dp),
+        modifier =
+            Modifier
+                .clickable(onClick = onClick)
+                .padding(10.dp),
     ) {
         Row(verticalAlignment = CenterVertically, modifier = Modifier.width(68.dp)) {
             Text(
@@ -124,6 +129,10 @@ fun UserReactionsRow(
         Row(verticalAlignment = CenterVertically, modifier = remember { Modifier.weight(1f) }) {
             UserZapModel(model)
         }
+
+        Row(verticalAlignment = CenterVertically, modifier = remember { Modifier.weight(1f) }) {
+            UserTipModel(model)
+        }
     }
 }
 
@@ -139,6 +148,19 @@ private fun UserZapModel(model: UserReactionsViewModel) {
     Spacer(modifier = Modifier.width(8.dp))
 
     UserZapReaction(model)
+}
+
+@Composable
+private fun UserTipModel(model: UserReactionsViewModel) {
+    TipIcon(
+        modifier = Size24Modifier,
+        contentDescriptor = R.string.monero_tips,
+        tint = MoneroOrange,
+    )
+
+    Spacer(modifier = Modifier.width(8.dp))
+
+    UserTipReaction(model)
 }
 
 @Composable
@@ -190,6 +212,7 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
     private var _reactions = MutableStateFlow<Map<String, Int>>(emptyMap())
     private var _boosts = MutableStateFlow<Map<String, Int>>(emptyMap())
     private var _zaps = MutableStateFlow<Map<String, BigDecimal>>(emptyMap())
+    private var _tips = MutableStateFlow<Map<String, Int>>(emptyMap())
     private var _replies = MutableStateFlow<Map<String, Int>>(emptyMap())
 
     private var _chartModel = MutableStateFlow<ComposedChartEntryModel<ChartEntryModel>?>(null)
@@ -198,6 +221,7 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
     val reactions = _reactions.asStateFlow()
     val boosts = _boosts.asStateFlow()
     val zaps = _zaps.asStateFlow()
+    val tips = _tips.asStateFlow()
     val replies = _replies.asStateFlow()
 
     val chartModel = _chartModel.asStateFlow()
@@ -210,6 +234,7 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
     val todaysBoostCount = _boosts.map { showCount(it[today()]) }.distinctUntilChanged()
     val todaysReactionCount = _reactions.map { showCount(it[today()]) }.distinctUntilChanged()
     val todaysZapAmount = _zaps.map { showAmountAxis(it[today()]) }.distinctUntilChanged()
+    val todaysTipCount = _tips.map { showCount(it[today()]) }.distinctUntilChanged()
 
     var shouldShowDecimalsInAxis = false
 
@@ -229,6 +254,7 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
         val reactions = mutableMapOf<String, Int>()
         val boosts = mutableMapOf<String, Int>()
         val zaps = mutableMapOf<String, BigDecimal>()
+        val tips = mutableMapOf<String, Int>()
         val replies = mutableMapOf<String, Int>()
         val takenIntoAccount = mutableSetOf<HexKey>()
 
@@ -256,6 +282,14 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
                             (zaps[netDate] ?: BigDecimal.ZERO) + (noteEvent.amount ?: BigDecimal.ZERO)
                         takenIntoAccount.add(noteEvent.id())
                     }
+                } else if (noteEvent is TipEvent) {
+                    if (
+                        noteEvent.isTaggedUser(currentUser)
+                    ) {
+                        val netDate = formatDate(noteEvent.createdAt)
+                        tips[netDate] = (tips[netDate] ?: 0) + 1
+                        takenIntoAccount.add(noteEvent.id())
+                    }
                 } else if (noteEvent is BaseTextNoteEvent) {
                     if (noteEvent.isTaggedUser(currentUser) && noteEvent.pubKey != currentUser) {
                         val isCitation =
@@ -279,6 +313,7 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
         this._reactions.emit(reactions)
         this._replies.emit(replies)
         this._zaps.emit(zaps)
+        this._tips.emit(tips)
         this._boosts.emit(boosts)
 
         refreshChartModel()
@@ -292,6 +327,7 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
         val reactions = this._reactions.value.toMutableMap()
         val boosts = this._boosts.value.toMutableMap()
         val zaps = this._zaps.value.toMutableMap()
+        val tips = this._tips.value.toMutableMap()
         val replies = this._replies.value.toMutableMap()
         val takenIntoAccount = this.takenIntoAccount.toMutableSet()
         var hasNewElements = false
@@ -324,6 +360,15 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
                             takenIntoAccount.add(noteEvent.id())
                             hasNewElements = true
                         }
+                    } else if (noteEvent is TipEvent) {
+                        if (
+                            noteEvent.isTaggedUser(currentUser)
+                        ) {
+                            val netDate = formatDate(noteEvent.createdAt)
+                            tips[netDate] = (tips[netDate] ?: 0) + 1
+                            takenIntoAccount.add(noteEvent.id())
+                            hasNewElements = true
+                        }
                     } else if (noteEvent is BaseTextNoteEvent) {
                         if (noteEvent.isTaggedUser(currentUser) && noteEvent.pubKey != currentUser) {
                             val isCitation =
@@ -350,6 +395,7 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
             this._reactions.emit(reactions)
             this._replies.emit(replies)
             this._zaps.emit(zaps)
+            this._tips.emit(tips)
             this._boosts.emit(boosts)
 
             refreshChartModel()
@@ -375,6 +421,9 @@ class UserReactionsViewModel(val account: Account) : ViewModel() {
                 },
                 dataAxisLabels.mapIndexed { index, dateStr ->
                     entryOf(index, _reactions.value[dateStr]?.toFloat() ?: 0f)
+                },
+                dataAxisLabels.mapIndexed { index, dateStr ->
+                    entryOf(index, _tips.value[dateStr]?.toFloat() ?: 0f)
                 },
             )
 
@@ -495,6 +544,16 @@ fun UserLikeReaction(model: UserReactionsViewModel) {
 @Composable
 fun UserZapReaction(model: UserReactionsViewModel) {
     val amount by model.todaysZapAmount.collectAsStateWithLifecycle("")
+    Text(
+        amount,
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp,
+    )
+}
+
+@Composable
+fun UserTipReaction(model: UserReactionsViewModel) {
+    val amount by model.todaysTipCount.collectAsStateWithLifecycle("")
     Text(
         amount,
         fontWeight = FontWeight.Bold,

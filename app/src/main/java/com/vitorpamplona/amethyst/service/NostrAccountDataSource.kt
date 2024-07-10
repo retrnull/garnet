@@ -62,6 +62,7 @@ import com.vitorpamplona.quartz.events.RepostEvent
 import com.vitorpamplona.quartz.events.SealedGossipEvent
 import com.vitorpamplona.quartz.events.StatusEvent
 import com.vitorpamplona.quartz.events.TextNoteEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import com.vitorpamplona.quartz.utils.TimeUtils
 
 // TODO: Migrate this to a property of AccountVi
@@ -190,6 +191,7 @@ object NostrAccountDataSource : NostrDataSource("AccountData") {
                             ReportEvent.KIND,
                             LnZapEvent.KIND,
                             LnZapPaymentResponseEvent.KIND,
+                            TipEvent.KIND,
                             ChannelMessageEvent.KIND,
                             BadgeAwardEvent.KIND,
                         ),
@@ -332,6 +334,10 @@ object NostrAccountDataSource : NostrDataSource("AccountData") {
 
                         LocalCache.justConsume(event, relay)
                     }
+                }
+
+                is TipEvent -> {
+                    TipEventDataSource.consume(event)
                 }
 
                 else -> {

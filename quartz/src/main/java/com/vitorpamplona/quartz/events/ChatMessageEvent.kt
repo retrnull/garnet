@@ -78,6 +78,7 @@ class ChatMessageEvent(
             zapReceiver: List<ZapSplitSetup>? = null,
             markAsSensitive: Boolean = false,
             zapRaiserAmount: Long? = null,
+            tipReceiver: List<TipSplitSetup>? = null,
             geohash: String? = null,
             signer: NostrSigner,
             createdAt: Long = TimeUtils.now(),
@@ -96,6 +97,9 @@ class ChatMessageEvent(
                 tags.add(arrayOf("content-warning", ""))
             }
             zapRaiserAmount?.let { tags.add(arrayOf("zapraiser", "$it")) }
+            tipReceiver?.forEach {
+                tags.add(arrayOf("monero", it.addressOrPubKeyHex, it.relay ?: "", it.weight.toString()))
+            }
             geohash?.let { tags.addAll(geohashMipMap(it)) }
             subject?.let { tags.add(arrayOf("subject", it)) }
             nip94attachments?.let {

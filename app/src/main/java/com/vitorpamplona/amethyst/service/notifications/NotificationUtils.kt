@@ -38,8 +38,10 @@ import com.vitorpamplona.amethyst.ui.MainActivity
 object NotificationUtils {
     private var dmChannel: NotificationChannel? = null
     private var zapChannel: NotificationChannel? = null
+    private var tipChannel: NotificationChannel? = null
     private const val DM_GROUP_KEY = "com.vitorpamplona.amethyst.DM_NOTIFICATION"
     private const val ZAP_GROUP_KEY = "com.vitorpamplona.amethyst.ZAP_NOTIFICATION"
+    private const val TIP_GROUP_KEY = "com.vitorpamplona.amethyst.TIP_NOTIFICATION"
 
     fun NotificationManager.getOrCreateDMChannel(applicationContext: Context): NotificationChannel {
         if (dmChannel != null) return dmChannel!!
@@ -87,6 +89,29 @@ object NotificationUtils {
         return zapChannel!!
     }
 
+    fun NotificationManager.getOrCreateTipChannel(applicationContext: Context): NotificationChannel {
+        if (tipChannel != null) return tipChannel!!
+
+        tipChannel =
+            NotificationChannel(
+                applicationContext.getString(R.string.app_notification_tips_channel_id),
+                applicationContext.getString(R.string.app_notification_tips_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            )
+                .apply {
+                    description =
+                        applicationContext.getString(R.string.app_notification_tips_channel_description)
+                }
+
+        // Register the channel with the system
+        val notificationManager: NotificationManager =
+            applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        notificationManager.createNotificationChannel(tipChannel!!)
+
+        return tipChannel!!
+    }
+
     fun NotificationManager.sendZapNotification(
         id: String,
         messageBody: String,
@@ -106,6 +131,29 @@ object NotificationUtils {
             uri,
             channelId,
             ZAP_GROUP_KEY,
+            applicationContext,
+        )
+    }
+
+    fun NotificationManager.sendTipNotification(
+        id: String,
+        messageBody: String,
+        messageTitle: String,
+        pictureUrl: String?,
+        uri: String,
+        applicationContext: Context,
+    ) {
+        val tipChannel = getOrCreateTipChannel(applicationContext)
+        val channelId = applicationContext.getString(R.string.app_notification_tips_channel_id)
+
+        sendNotification(
+            id,
+            messageBody,
+            messageTitle,
+            pictureUrl,
+            uri,
+            channelId,
+            TIP_GROUP_KEY,
             applicationContext,
         )
     }

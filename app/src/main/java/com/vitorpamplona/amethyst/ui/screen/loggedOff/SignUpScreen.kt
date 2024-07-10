@@ -68,8 +68,10 @@ import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.commons.hashtags.Amethyst
 import com.vitorpamplona.amethyst.commons.hashtags.CustomHashTagIcons
 import com.vitorpamplona.amethyst.service.PackageUtils
+import com.vitorpamplona.amethyst.ui.actions.LoadingAnimation
 import com.vitorpamplona.amethyst.ui.screen.AccountStateViewModel
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.ConnectOrbotDialog
+import com.vitorpamplona.amethyst.ui.theme.DoubleHorzSpacer
 import com.vitorpamplona.amethyst.ui.theme.Size10dp
 import com.vitorpamplona.amethyst.ui.theme.Size20dp
 import com.vitorpamplona.amethyst.ui.theme.Size35dp
@@ -97,6 +99,7 @@ fun SignUpPage(
 ) {
     val displayName = remember { mutableStateOf(TextFieldValue("")) }
     var errorMessage by remember { mutableStateOf("") }
+    var processingSignUp by remember { mutableStateOf(false) }
     val acceptedTerms = remember { mutableStateOf(false) }
     var termsAcceptanceIsRequired by remember { mutableStateOf("") }
 
@@ -161,7 +164,9 @@ fun SignUpPage(
                         }
 
                         if (acceptedTerms.value && displayName.value.text.isNotBlank()) {
+                            processingSignUp = true
                             accountStateViewModel.login(displayName.value.text, useProxy.value, proxyPort.value.toInt()) {
+                                processingSignUp = false
                                 errorMessage = context.getString(R.string.invalid_key)
                             }
                         }
@@ -272,16 +277,22 @@ fun SignUpPage(
                     }
 
                     if (acceptedTerms.value && displayName.value.text.isNotBlank()) {
+                        processingSignUp = true
                         accountStateViewModel.newKey(useProxy.value, proxyPort.value.toInt(), displayName.value.text)
                     }
                 },
                 shape = RoundedCornerShape(Size35dp),
                 modifier = Modifier.height(50.dp),
             ) {
-                Text(
-                    text = stringResource(R.string.create_account),
-                    modifier = Modifier.padding(horizontal = Size40dp),
-                )
+                Row(modifier = Modifier.padding(horizontal = Size40dp)) {
+                    if (processingSignUp) {
+                        LoadingAnimation()
+                        Spacer(DoubleHorzSpacer)
+                    }
+                    Text(
+                        text = stringResource(R.string.create_account),
+                    )
+                }
             }
         }
 

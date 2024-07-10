@@ -103,6 +103,7 @@ import com.vitorpamplona.quartz.events.SealedGossipEvent
 import com.vitorpamplona.quartz.events.StatusEvent
 import com.vitorpamplona.quartz.events.TextNoteEvent
 import com.vitorpamplona.quartz.events.TextNoteModificationEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import com.vitorpamplona.quartz.events.VideoHorizontalEvent
 import com.vitorpamplona.quartz.events.VideoVerticalEvent
 import com.vitorpamplona.quartz.events.WikiNoteEvent
@@ -549,6 +550,9 @@ object LocalCache {
                     (event.zapRequest?.taggedAddresses()?.map { getOrCreateAddressableNote(it) } ?: emptyList())
             is LnZapRequestEvent ->
                 event.zappedPost().mapNotNull { checkGetOrCreateNote(it) } +
+                    event.taggedAddresses().map { getOrCreateAddressableNote(it) }
+            is TipEvent ->
+                event.taggedEvents().mapNotNull { checkGetOrCreateNote(it) } +
                     event.taggedAddresses().map { getOrCreateAddressableNote(it) }
             is BadgeProfilesEvent ->
                 event.badgeAwardEvents().mapNotNull { checkGetOrCreateNote(it) } +
@@ -1694,6 +1698,32 @@ object LocalCache {
         }
     }
 
+    // NOTE: the event has already been verified at this point
+    fun consume(event: TipEvent) {
+        val tipNote = getOrCreateNote(event.id())
+
+        // already processed (and no new values)
+        if (tipNote.event != null && (tipNote.event as? TipEvent)?.valueByUser == event.valueByUser) {
+            return
+        }
+
+        val author = getOrCreateUser(event.pubKey)
+        val replyTo = computeReplyTo(event)
+        tipNote.loadEvent(event, author, replyTo)
+
+        event.taggedUsers().forEach {
+            val user = getOrCreateUser(it)
+            user.addTip(tipNote)
+        }
+
+        event.taggedEvents().forEach {
+            val taggedNote = getOrCreateNote(it)
+            taggedNote.addTip(tipNote)
+        }
+
+        refreshObservers(tipNote)
+    }
+
     fun findUsersStartingWith(username: String): List<User> {
         checkNotInMainThread()
 
@@ -1731,7 +1761,8 @@ object LocalCache {
                 note.event is CommunityPostApprovalEvent ||
                 note.event is ReactionEvent ||
                 note.event is LnZapEvent ||
-                note.event is LnZapRequestEvent
+                note.event is LnZapRequestEvent ||
+                note.event is TipEvent
             ) {
                 return@filter false
             }
@@ -1755,7 +1786,8 @@ object LocalCache {
                     addressable.event is CommunityPostApprovalEvent ||
                     addressable.event is ReactionEvent ||
                     addressable.event is LnZapEvent ||
-                    addressable.event is LnZapRequestEvent
+                    addressable.event is LnZapRequestEvent ||
+                    addressable.event is TipEvent
                 ) {
                     return@filter false
                 }
@@ -1985,6 +2017,7 @@ object LocalCache {
             masterNote.removeBoost(note)
             masterNote.removeReaction(note)
             masterNote.removeZap(note)
+            masterNote.removeTip(note)
             masterNote.removeReport(note)
             masterNote.clearEOSE() // allows reloading of these events if needed
         }
@@ -2003,6 +2036,13 @@ object LocalCache {
                 val author = getUserIfExists(it)
                 author?.removeZap(note)
                 author?.clearEOSE()
+            }
+        }
+        if (noteEvent is TipEvent) {
+            noteEvent.taggedUsers().forEach {
+                val user = getUserIfExists(it)
+                user?.removeTip(note)
+                user?.clearEOSE()
             }
         }
         if (noteEvent is ReportEvent) {
@@ -2314,6 +2354,7 @@ object LocalCache {
                     consume(event)
                 }
                 is StatusEvent -> consume(event, relay)
+                is TipEvent -> consume(event)
                 is TextNoteEvent -> consume(event, relay)
                 is TextNoteModificationEvent -> consume(event, relay)
                 is VideoHorizontalEvent -> consume(event, relay)

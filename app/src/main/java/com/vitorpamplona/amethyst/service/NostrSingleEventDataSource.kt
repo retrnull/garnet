@@ -21,14 +21,17 @@
 package com.vitorpamplona.amethyst.service
 
 import com.vitorpamplona.amethyst.model.AddressableNote
+import com.vitorpamplona.amethyst.model.LocalCache
 import com.vitorpamplona.amethyst.model.Note
 import com.vitorpamplona.amethyst.model.User
 import com.vitorpamplona.amethyst.service.relays.EOSETime
 import com.vitorpamplona.amethyst.service.relays.EVENT_FINDER_TYPES
 import com.vitorpamplona.amethyst.service.relays.JsonFilter
+import com.vitorpamplona.amethyst.service.relays.Relay
 import com.vitorpamplona.amethyst.service.relays.TypedFilter
 import com.vitorpamplona.quartz.events.CommunityPostApprovalEvent
 import com.vitorpamplona.quartz.events.DeletionEvent
+import com.vitorpamplona.quartz.events.Event
 import com.vitorpamplona.quartz.events.GenericRepostEvent
 import com.vitorpamplona.quartz.events.GitReplyEvent
 import com.vitorpamplona.quartz.events.LiveActivitiesChatMessageEvent
@@ -40,6 +43,7 @@ import com.vitorpamplona.quartz.events.ReportEvent
 import com.vitorpamplona.quartz.events.RepostEvent
 import com.vitorpamplona.quartz.events.TextNoteEvent
 import com.vitorpamplona.quartz.events.TextNoteModificationEvent
+import com.vitorpamplona.quartz.events.TipEvent
 
 object NostrSingleEventDataSource : NostrDataSource("SingleEventFeed") {
     private var eventsToWatch = setOf<Note>()
@@ -71,6 +75,7 @@ object NostrSingleEventDataSource : NostrDataSource("SingleEventFeed") {
                                     GenericRepostEvent.KIND,
                                     ReportEvent.KIND,
                                     LnZapEvent.KIND,
+                                    TipEvent.KIND,
                                     PollNoteEvent.KIND,
                                     CommunityPostApprovalEvent.KIND,
                                     LiveActivitiesChatMessageEvent.KIND,
@@ -153,6 +158,7 @@ object NostrSingleEventDataSource : NostrDataSource("SingleEventFeed") {
                                     GenericRepostEvent.KIND,
                                     ReportEvent.KIND,
                                     LnZapEvent.KIND,
+                                    TipEvent.KIND,
                                     PollNoteEvent.KIND,
                                     OtsEvent.KIND,
                                     TextNoteModificationEvent.KIND,
@@ -298,6 +304,24 @@ object NostrSingleEventDataSource : NostrDataSource("SingleEventFeed") {
             addressesToWatch = addressesToWatch.minus(addressableNote)
             invalidateFilters()
         }
+    }
+
+    override fun consume(
+        event: Event,
+        relay: Relay,
+    ) {
+        if (!LocalCache.justVerify(event)) {
+            return
+        }
+
+        when (event) {
+            is TipEvent -> {
+                TipEventDataSource.consume(event)
+                return
+            }
+        }
+
+        LocalCache.justConsume(event, relay)
     }
 }
 

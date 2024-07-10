@@ -128,6 +128,7 @@ import com.vitorpamplona.amethyst.ui.note.LikeReaction
 import com.vitorpamplona.amethyst.ui.note.LoadChannel
 import com.vitorpamplona.amethyst.ui.note.NoteAuthorPicture
 import com.vitorpamplona.amethyst.ui.note.NoteUsernameDisplay
+import com.vitorpamplona.amethyst.ui.note.TipReaction
 import com.vitorpamplona.amethyst.ui.note.UserPicture
 import com.vitorpamplona.amethyst.ui.note.UsernameDisplay
 import com.vitorpamplona.amethyst.ui.note.ZapReaction
@@ -988,6 +989,12 @@ private fun ShortChannelActionOptions(
                     accountViewModel = accountViewModel,
                     nav = nav,
                 )
+                TipReaction(
+                    baseNote = it,
+                    grayTint = MaterialTheme.colorScheme.onSurface,
+                    accountViewModel = accountViewModel,
+                    nav = nav,
+                )
                 Spacer(modifier = StdHorzSpacer)
             }
         }
@@ -1067,6 +1074,13 @@ private fun LiveChannelActionOptions(
         )
         Spacer(modifier = StdHorzSpacer)
         ZapReaction(
+            baseNote = it,
+            grayTint = MaterialTheme.colorScheme.onSurface,
+            accountViewModel = accountViewModel,
+            nav = nav,
+        )
+        Spacer(modifier = StdHorzSpacer)
+        TipReaction(
             baseNote = it,
             grayTint = MaterialTheme.colorScheme.onSurface,
             accountViewModel = accountViewModel,

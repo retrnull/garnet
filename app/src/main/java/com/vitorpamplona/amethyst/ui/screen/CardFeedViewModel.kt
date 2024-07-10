@@ -46,6 +46,7 @@ import com.vitorpamplona.quartz.events.LnZapEvent
 import com.vitorpamplona.quartz.events.PrivateDmEvent
 import com.vitorpamplona.quartz.events.ReactionEvent
 import com.vitorpamplona.quartz.events.RepostEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -192,6 +193,29 @@ open class CardFeedViewModel(val localFilter: FeedFilter<Note>) : ViewModel(), I
                 }
             }
 
+        val tipsPerUser = mutableMapOf<User, MutableList<Note>>()
+        val tipsPerEvent = mutableMapOf<Note, MutableList<Note>>()
+        notes
+            .filter { it.event is TipEvent }
+            .forEach { tipEvent ->
+                val tippedPost = tipEvent.replyTo?.firstOrNull()
+                if (tippedPost != null) {
+                    tipsPerEvent
+                        .getOrPut(tippedPost, { mutableListOf() })
+                        .add(tipEvent)
+                } else {
+                    val event = (tipEvent.event as TipEvent)
+                    val tippedUsers = event.taggedUsers().mapNotNull { LocalCache.getUserIfExists(it) }
+                    for (tippedUser in tippedUsers) {
+                        if (event.valueByUser.containsKey(tippedUser.info?.moneroAddress())) {
+                            tipsPerUser
+                                .getOrPut(tippedUser, { mutableListOf() })
+                                .add(tipEvent)
+                        }
+                    }
+                }
+            }
+
         val boostsPerEvent = mutableMapOf<Note, MutableList<Note>>()
         notes
             .filter { it.event is RepostEvent || it.event is GenericRepostEvent }
@@ -207,16 +231,17 @@ open class CardFeedViewModel(val localFilter: FeedFilter<Note>) : ViewModel(), I
 
         val sdf = DateTimeFormatter.ofPattern("yyyy-MM-dd") // SimpleDateFormat()
 
-        val allBaseNotes = zapsPerEvent.keys + boostsPerEvent.keys + reactionsPerEvent.keys
+        val allBaseNotes = zapsPerEvent.keys + tipsPerEvent.keys + boostsPerEvent.keys + reactionsPerEvent.keys
         val multiCards =
             allBaseNotes
                 .map { baseNote ->
                     val boostsInCard = boostsPerEvent[baseNote] ?: emptyList()
                     val reactionsInCard = reactionsPerEvent[baseNote] ?: emptyList()
                     val zapsInCard = zapsPerEvent[baseNote] ?: emptyList()
+                    val tipsInCard = tipsPerEvent[baseNote] ?: emptyList()
 
                     val singleList =
-                        (boostsInCard + zapsInCard.map { it.response } + reactionsInCard).groupBy {
+                        (boostsInCard + zapsInCard.map { it.response } + tipsInCard + reactionsInCard).groupBy {
                             sdf.format(
                                 Instant.ofEpochSecond(it.createdAt() ?: 0)
                                     .atZone(ZoneId.systemDefault())
@@ -240,6 +265,7 @@ open class CardFeedViewModel(val localFilter: FeedFilter<Note>) : ViewModel(), I
                                     boostsInCard.filter { it in chunk }.toImmutableList(),
                                     reactionsInCard.filter { it in chunk }.toImmutableList(),
                                     zapsInCard.filter { it.response in chunk }.toImmutableList(),
+                                    tipsInCard.filter { it in chunk }.toImmutableList(),
                                 )
                             }
                         }
@@ -271,13 +297,38 @@ open class CardFeedViewModel(val localFilter: FeedFilter<Note>) : ViewModel(), I
                 }
                 .flatten()
 
+        val userTips =
+            tipsPerUser
+                .map { user ->
+                    val byDay =
+                        user.value.groupBy {
+                            sdf.format(
+                                Instant.ofEpochSecond(it.createdAt() ?: 0)
+                                    .atZone(ZoneId.systemDefault())
+                                    .toLocalDateTime(),
+                            )
+                        }
+
+                    byDay.values.map {
+                        TipUserSetCard(
+                            user.key,
+                            it
+                                .sortedWith(compareBy({ it.createdAt() }, { it.idHex }))
+                                .reversed()
+                                .toImmutableList(),
+                        )
+                    }
+                }
+                .flatten()
+
         val textNoteCards =
             notes
                 .filter {
                     it.event !is ReactionEvent &&
                         it.event !is RepostEvent &&
                         it.event !is GenericRepostEvent &&
-                        it.event !is LnZapEvent
+                        it.event !is LnZapEvent &&
+                        it.event !is TipEvent
                 }
                 .map {
                     if (it.event is PrivateDmEvent || it.event is ChatMessageEvent) {
@@ -289,7 +340,7 @@ open class CardFeedViewModel(val localFilter: FeedFilter<Note>) : ViewModel(), I
                     }
                 }
 
-        return (multiCards + textNoteCards + userZaps)
+        return (multiCards + textNoteCards + userZaps + userTips)
             .sortedWith(compareBy({ it.createdAt() }, { it.id() }))
             .reversed()
     }

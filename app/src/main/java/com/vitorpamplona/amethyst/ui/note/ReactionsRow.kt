@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -132,6 +133,7 @@ import com.vitorpamplona.amethyst.ui.theme.placeholderText
 import com.vitorpamplona.amethyst.ui.theme.placeholderTextColorFilter
 import com.vitorpamplona.quartz.encoders.Nip30CustomEmoji
 import com.vitorpamplona.quartz.events.BaseTextNoteEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -141,6 +143,7 @@ import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.math.MathContext
 import java.math.RoundingMode
 import java.text.DecimalFormat
 import kotlin.math.roundToInt
@@ -209,6 +212,9 @@ private fun InnerReactionRow(
             ZapReaction(baseNote, MaterialTheme.colorScheme.placeholderText, accountViewModel, nav = nav)
         },
         six = {
+            TipReaction(baseNote, MaterialTheme.colorScheme.placeholderText, accountViewModel, nav = nav)
+        },
+        seven = {
             ViewCountReaction(
                 note = baseNote,
                 grayTint = MaterialTheme.colorScheme.placeholderText,
@@ -227,6 +233,7 @@ private fun GenericInnerReactionRow(
     four: @Composable () -> Unit,
     five: @Composable () -> Unit,
     six: @Composable () -> Unit,
+    seven: @Composable () -> Unit,
 ) {
     Row(
         verticalAlignment = CenterVertically,
@@ -253,6 +260,8 @@ private fun GenericInnerReactionRow(
         Row(verticalAlignment = CenterVertically, modifier = fullWeight) { five() }
 
         Row(verticalAlignment = CenterVertically, modifier = fullWeight) { six() }
+
+        Row(verticalAlignment = CenterVertically, modifier = fullWeight) { seven() }
     }
 }
 
@@ -353,6 +362,7 @@ private fun WatchReactionsZapsBoostsAndDisplayIfExists(
             .hasReactions
             .observeAsState(
                 baseNote.zaps.isNotEmpty() ||
+                    baseNote.tips.isNotEmpty() ||
                     baseNote.boosts.isNotEmpty() ||
                     baseNote.reactions.isNotEmpty(),
             )
@@ -372,15 +382,17 @@ fun <T, K, R> LiveData<T>.combineWith(
     return result
 }
 
-fun <T, K, P, R> LiveData<T>.combineWith(
+fun <T, K, P, X, R> LiveData<T>.combineWith(
     liveData1: LiveData<K>,
     liveData2: LiveData<P>,
-    block: (T?, K?, P?) -> R,
+    liveData3: LiveData<X>,
+    block: (T?, K?, P?, X?) -> R,
 ): LiveData<R> {
     val result = MediatorLiveData<R>()
-    result.addSource(this) { result.value = block(this.value, liveData1.value, liveData2.value) }
-    result.addSource(liveData1) { result.value = block(this.value, liveData1.value, liveData2.value) }
-    result.addSource(liveData2) { result.value = block(this.value, liveData1.value, liveData2.value) }
+    result.addSource(this) { result.value = block(this.value, liveData1.value, liveData2.value, liveData3.value) }
+    result.addSource(liveData1) { result.value = block(this.value, liveData1.value, liveData2.value, liveData3.value) }
+    result.addSource(liveData2) { result.value = block(this.value, liveData1.value, liveData2.value, liveData3.value) }
+    result.addSource(liveData3) { result.value = block(this.value, liveData1.value, liveData2.value, liveData3.value) }
     return result
 }
 
@@ -418,6 +430,7 @@ private fun ReactionDetailGallery(
             .hasReactions
             .observeAsState(
                 baseNote.zaps.isNotEmpty() ||
+                    baseNote.tips.isNotEmpty() ||
                     baseNote.boosts.isNotEmpty() ||
                     baseNote.reactions.isNotEmpty(),
             )
@@ -429,6 +442,7 @@ private fun ReactionDetailGallery(
         ) {
             Column {
                 WatchZapAndRenderGallery(baseNote, backgroundColor, nav, accountViewModel)
+                WatchTipAndRenderGallery(baseNote, backgroundColor, nav, accountViewModel)
                 WatchBoostsAndRenderGallery(baseNote, nav, accountViewModel)
                 WatchReactionsAndRenderGallery(baseNote, nav, accountViewModel)
             }
@@ -501,6 +515,31 @@ private fun WatchZapAndRenderGallery(
     if (zapEvents.isNotEmpty()) {
         RenderZapGallery(
             zapEvents,
+            backgroundColor,
+            nav,
+            accountViewModel,
+        )
+    }
+}
+
+@Composable
+private fun WatchTipAndRenderGallery(
+    baseNote: Note,
+    backgroundColor: MutableState<Color>,
+    nav: (String) -> Unit,
+    accountViewModel: AccountViewModel,
+) {
+    val tipsState by baseNote.live().tips.observeAsState()
+    val tipEvents =
+        tipsState?.note?.tips?.mapNotNull {
+            val tip = it.event as TipEvent
+            val proof = tip.tipProof() ?: return@mapNotNull null
+            TipAmountCommentNotification(it.author, proof.message, null)
+        }
+
+    if (!tipEvents.isNullOrEmpty()) {
+        RenderTipGallery(
+            tipEvents.toImmutableList(),
             backgroundColor,
             nav,
             accountViewModel,
@@ -1096,6 +1135,153 @@ fun ZapReaction(
     }
 }
 
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+fun TipReaction(
+    baseNote: Note,
+    grayTint: Color,
+    accountViewModel: AccountViewModel,
+    iconSize: Dp = 20.dp,
+    iconSizeModifier: Modifier = Modifier.size(20.dp),
+    animationSize: Dp = 14.dp,
+    nav: (String) -> Unit,
+) {
+    var wantsToTip by remember { mutableStateOf(false) }
+    var wantsToChangeTipAmount by remember { mutableStateOf(false) }
+    var wantsToSetCustomTip by remember { mutableStateOf(false) }
+    var showErrorMessageDialog by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var tippingProgress by remember { mutableFloatStateOf(0f) }
+
+    Row(
+        verticalAlignment = CenterVertically,
+        modifier =
+            iconSizeModifier.combinedClickable(
+                role = Role.Button,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = rememberRipple(bounded = false, radius = Size24dp),
+                onClick = {
+                    tipClick(
+                        baseNote,
+                        accountViewModel,
+                        context,
+                        onTippingProgress = { progress: Float -> scope.launch { tippingProgress = progress } },
+                        onMultipleChoices = { wantsToTip = true },
+                        onError = { _, message ->
+                            scope.launch {
+                                tippingProgress = 0f
+                                showErrorMessageDialog = showErrorMessageDialog + message
+                            }
+                        },
+                    )
+                },
+                onLongClick = { wantsToChangeTipAmount = true },
+                onDoubleClick = {
+                    wantsToSetCustomTip = true
+                },
+            ),
+    ) {
+        if (wantsToTip) {
+            TipAmountChoicePopup(
+                baseNote = baseNote,
+                iconSize = iconSize,
+                accountViewModel = accountViewModel,
+                onDismiss = {
+                    wantsToTip = false
+                    tippingProgress = 0f
+                },
+                onChangeAmount = {
+                    wantsToTip = false
+                    wantsToChangeTipAmount = true
+                },
+                onError = { _, message ->
+                    scope.launch {
+                        tippingProgress = 0f
+                        showErrorMessageDialog = showErrorMessageDialog + message
+                    }
+                },
+                onProgress = { scope.launch(Dispatchers.Main) { tippingProgress = it } },
+            )
+        }
+
+        if (showErrorMessageDialog.isNotEmpty()) {
+            val msg = showErrorMessageDialog.joinToString("\n")
+            ErrorMessageDialog(
+                title = stringResource(id = R.string.error_dialog_tip_error),
+                textContent = msg,
+                onClickStartMessage = {
+                    baseNote.author?.let {
+                        scope.launch(Dispatchers.IO) {
+                            val route = routeToMessage(it, msg, accountViewModel)
+                            nav(route)
+                        }
+                    }
+                },
+                onDismiss = { showErrorMessageDialog = emptyList() },
+            )
+        }
+
+        if (wantsToChangeTipAmount) {
+            UpdateTipAmountDialog(
+                onClose = { wantsToChangeTipAmount = false },
+                accountViewModel = accountViewModel,
+            )
+        }
+
+        if (wantsToSetCustomTip) {
+            TipCustomDialog(
+                onClose = { wantsToSetCustomTip = false },
+                onError = { _, message ->
+                    scope.launch {
+                        tippingProgress = 0f
+                        showErrorMessageDialog = showErrorMessageDialog + message
+                    }
+                },
+                onProgress = { scope.launch(Dispatchers.Main) { tippingProgress = it } },
+                accountViewModel = accountViewModel,
+                baseNote = baseNote,
+            )
+        }
+
+        if (tippingProgress > 0.00001 && tippingProgress < 0.99999) {
+            Spacer(Modifier.width(3.dp))
+            CircularProgressIndicator(
+                progress =
+                    animateFloatAsState(
+                        targetValue = tippingProgress,
+                        animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
+                        label = "TipIconIndicator",
+                    )
+                        .value,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(animationSize),
+            )
+        } else {
+            ObserveTipIcon(
+                baseNote,
+                accountViewModel,
+            ) { wasTippedByLoggedInUser ->
+                Crossfade(targetState = wasTippedByLoggedInUser.value, label = "TipIcon") {
+                    if (it) {
+                        TippedIcon(iconSizeModifier)
+                    } else {
+                        TipIcon(iconSizeModifier, grayTint)
+                    }
+                }
+            }
+        }
+    }
+
+    ObserveTipAmountText(baseNote) { tipAmountTxt ->
+        Box(Modifier.padding(start = 5.dp)) {
+            SlidingAnimationAmount(tipAmountTxt, grayTint)
+        }
+    }
+}
+
 fun zapClick(
     baseNote: Note,
     accountViewModel: AccountViewModel,
@@ -1137,6 +1323,99 @@ fun zapClick(
         )
     } else if (accountViewModel.account.zapAmountChoices.size > 1) {
         onMultipleChoices()
+    }
+}
+
+fun tipClick(
+    baseNote: Note,
+    accountViewModel: AccountViewModel,
+    context: Context,
+    onTippingProgress: (Float) -> Unit,
+    onMultipleChoices: () -> Unit,
+    onError: (String, String) -> Unit,
+) {
+    if (baseNote.isDraft()) {
+        accountViewModel.toast(
+            R.string.draft_note,
+            R.string.it_s_not_possible_to_tip_to_a_draft_note,
+        )
+        return
+    }
+
+    if (accountViewModel.account.tipAmountChoices.isEmpty()) {
+        accountViewModel.toast(
+            context.getString(R.string.error_dialog_tip_error),
+            context.getString(R.string.no_tip_amount_setup_long_press_to_change),
+        )
+    } else if (!accountViewModel.isWriteable() && accountViewModel.account.defaultTipType == TipEvent.TipType.PUBLIC) {
+        accountViewModel.toast(
+            context.getString(R.string.error_dialog_tip_error),
+            context.getString(R.string.login_with_a_private_key_to_be_able_to_send_public_tip),
+        )
+    } else if (accountViewModel.account.tipAmountChoices.size == 1) {
+        accountViewModel.tip(
+            baseNote,
+            decToPiconero(accountViewModel.account.tipAmountChoices.first())!!,
+            "",
+            context,
+            onError = onError,
+            onProgress = { onTippingProgress(it) },
+            tipType = accountViewModel.account.defaultTipType,
+            priority = accountViewModel.account.defaultMoneroTransactionPriority,
+        )
+    } else if (accountViewModel.account.tipAmountChoices.size > 1) {
+        onMultipleChoices()
+    }
+}
+
+@Composable
+fun ObserveTipIcon(
+    baseNote: Note,
+    accountViewModel: AccountViewModel,
+    inner: @Composable (MutableState<Boolean>) -> Unit,
+) {
+    val wasTippedByLoggedInUser = remember { mutableStateOf(false) }
+
+    if (!wasTippedByLoggedInUser.value) {
+        val tipsState by baseNote.live().tips.observeAsState()
+
+        LaunchedEffect(key1 = tipsState) {
+            if (tipsState?.note?.tips?.isNotEmpty() == true) {
+                val newWasTipped = accountViewModel.noteWasTippedByAccount(baseNote)
+                if (wasTippedByLoggedInUser.value != newWasTipped) {
+                    wasTippedByLoggedInUser.value = newWasTipped
+                }
+            }
+        }
+    }
+
+    inner(wasTippedByLoggedInUser)
+}
+
+@Composable
+fun ObserveTipAmountText(
+    baseNote: Note,
+    inner: @Composable (String) -> Unit,
+) {
+    val tipsState by baseNote.live().tips.observeAsState()
+
+    if (tipsState?.note?.tips?.isNotEmpty() == true) {
+        val initialTips = baseNote.tips.size
+        val initialValue = if (initialTips == 0) "" else showAmount(initialTips.toBigDecimal())
+        val tipAmountTxt by
+            produceState(initialValue = initialValue, key1 = tipsState) {
+                tipsState?.note?.let {
+                    val tips = it.tips.size
+                    val newTipAmount = if (tips == 0) "" else showAmount(tips.toBigDecimal())
+                    if (value != newTipAmount) {
+                        value = newTipAmount
+                    }
+                }
+            }
+
+        inner(tipAmountTxt)
+    } else {
+        inner("")
     }
 }
 
@@ -1501,6 +1780,84 @@ fun ZapAmountChoicePopup(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@Composable
+fun TipAmountChoicePopup(
+    baseNote: Note,
+    accountViewModel: AccountViewModel,
+    iconSize: Dp,
+    onDismiss: () -> Unit,
+    onChangeAmount: () -> Unit,
+    onError: (title: String, text: String) -> Unit,
+    onProgress: (percent: Float) -> Unit,
+) {
+    val context = LocalContext.current
+
+    val iconSizePx = with(LocalDensity.current) { -iconSize.toPx().toInt() }
+
+    Popup(
+        alignment = Alignment.BottomCenter,
+        offset = IntOffset(0, iconSizePx),
+        onDismissRequest = { onDismiss() },
+    ) {
+        FlowRow(horizontalArrangement = Arrangement.Center) {
+            accountViewModel.account.tipAmountChoices.forEach { amount ->
+                Button(
+                    modifier = Modifier.padding(horizontal = 3.dp),
+                    onClick = {
+                        accountViewModel.tip(
+                            baseNote,
+                            decToPiconero(amount)!!,
+                            "",
+                            context,
+                            onError,
+                            onProgress,
+                            accountViewModel.account.defaultTipType,
+                            accountViewModel.account.defaultMoneroTransactionPriority,
+                        )
+                        onDismiss()
+                    },
+                    shape = ButtonBorder,
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                        ),
+                ) {
+                    TipIcon(
+                        Modifier
+                            .padding(end = 5.dp)
+                            .size(18.dp),
+                        tint = Color.White,
+                    )
+
+                    Text(
+                        amount,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier =
+                            Modifier.combinedClickable(
+                                onClick = {
+                                    accountViewModel.tip(
+                                        baseNote,
+                                        decToPiconero(amount)!!,
+                                        "",
+                                        context,
+                                        onError,
+                                        onProgress,
+                                        accountViewModel.account.defaultTipType,
+                                        accountViewModel.account.defaultMoneroTransactionPriority,
+                                    )
+                                    onDismiss()
+                                },
+                                onLongClick = { onChangeAmount() },
+                            ),
+                    )
+                }
+            }
+        }
+    }
+}
+
 fun showCount(count: Int?): String {
     if (count == null) return ""
     if (count == 0) return ""
@@ -1532,5 +1889,46 @@ fun showAmount(amount: BigDecimal?): String {
         amount >= OneMega -> dfM.format(amount.div(OneMega).setScale(0, RoundingMode.HALF_UP))
         amount >= TenKilo -> dfK.format(amount.div(OneKilo).setScale(0, RoundingMode.HALF_UP))
         else -> dfN.format(amount)
+    }
+}
+
+fun showMoneroAmount(amount: ULong): String {
+    if (amount == 0UL) {
+        return "0"
+    }
+
+    var amountString = amount.toString()
+
+    amountString =
+        if (amountString.length <= 12) {
+            val zeros = "0".repeat(12 - amountString.length)
+            "0.$zeros$amountString"
+        } else {
+            val index = amountString.length - 12
+            amountString.replaceRange(index, index, ".")
+        }
+
+    return BigDecimal(amountString)
+        .round(MathContext(12))
+        .stripTrailingZeros()
+        .toPlainString()
+}
+
+// NOTE: this assumes that amount is a valid decimal string
+fun decToPiconero(amount: String): ULong? {
+    val index = amount.indexOfAny(charArrayOf('.', ','))
+
+    if (index != -1) {
+        val int = amount.substring(0, index)
+
+        var dec = amount.substring(index + 1)
+        dec = dec.substring(0, dec.length.coerceIn(0..12))
+
+        val zeros = "0".repeat(12 - dec.length)
+
+        return "$int$dec$zeros".toULongOrNull()
+    } else {
+        val zeros = "0".repeat(12)
+        return "$amount$zeros".toULongOrNull()
     }
 }

@@ -20,7 +20,10 @@
  */
 package com.vitorpamplona.amethyst.service.relays
 
+import com.google.common.net.HostAndPort
+import com.vitorpamplona.amethyst.model.NetworkType
 import com.vitorpamplona.amethyst.model.RelaySetupInfo
+import com.vitorpamplona.amethyst.model.WalletManager
 
 object Constants {
     val activeTypes = setOf(FeedType.FOLLOWS, FeedType.PRIVATE_DMS)
@@ -60,4 +63,11 @@ object Constants {
             RelaySetupInfo("wss://relay.noswhere.com", read = true, write = false, feedTypes = activeTypesSearch),
         )
     val forcedRelaysForSearchSet = forcedRelayForSearch.map { it.url }
+
+    val defaultMoneroDaemon: HostAndPort =
+        when (WalletManager.getNetworkType()) {
+            NetworkType.STAGENET -> HostAndPort.fromParts("node.monerodevs.org", 38089)
+            NetworkType.MAINNET -> HostAndPort.fromParts("node.monerodevs.org", 18089)
+            else -> throw IllegalStateException("Unexpected network type")
+        }
 }

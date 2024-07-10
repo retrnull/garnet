@@ -34,12 +34,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DrawerState
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -51,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -73,12 +78,14 @@ import androidx.lifecycle.map
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavBackStackEntry
 import coil.Coil
+import com.vitorpamplona.amethyst.Amethyst
 import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.model.Account
 import com.vitorpamplona.amethyst.model.AddressableNote
 import com.vitorpamplona.amethyst.model.GLOBAL_FOLLOWS
 import com.vitorpamplona.amethyst.model.KIND3_FOLLOWS
 import com.vitorpamplona.amethyst.model.LocalCache
+import com.vitorpamplona.amethyst.service.MoneroDataSource
 import com.vitorpamplona.amethyst.service.NostrAccountDataSource
 import com.vitorpamplona.amethyst.service.NostrChannelDataSource
 import com.vitorpamplona.amethyst.service.NostrChatroomDataSource
@@ -114,6 +121,8 @@ import com.vitorpamplona.amethyst.ui.note.types.LongCommunityHeader
 import com.vitorpamplona.amethyst.ui.note.types.ShortCommunityHeader
 import com.vitorpamplona.amethyst.ui.screen.equalImmutableLists
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.AccountViewModel
+import com.vitorpamplona.amethyst.ui.screen.loggedIn.BackupSeedDialog
+import com.vitorpamplona.amethyst.ui.screen.loggedIn.CustomRestoreHeightDialog
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.DislayGeoTagHeader
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.GeoHashActionOptions
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.HashtagActionOptions
@@ -200,8 +209,82 @@ private fun RenderTopRouteBar(
                     else -> MainTopBar(drawerState, accountViewModel, nav)
                 }
             } else {
-                MainTopBar(drawerState, accountViewModel, nav)
+                when (currentRoute) {
+                    Route.Monero.base -> MoneroTopBar(stringResource(id = R.string.monero), accountViewModel, navPopBack)
+                    else -> MainTopBar(drawerState, accountViewModel, nav)
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun MoneroTopBar(
+    id: String,
+    accountViewModel: AccountViewModel,
+    navPopBack: () -> Unit,
+) {
+    val scope = Amethyst.instance.applicationIOScope
+    var moreActionsExpanded by remember { mutableStateOf(false) }
+    var showBackupSeedDialog by remember { mutableStateOf(false) }
+    var showCustomRestoreHeightDialog by remember { mutableStateOf(false) }
+    val maxRestoreHeight by MoneroDataSource.daemonHeight().collectAsState(initial = 0, Dispatchers.IO)
+
+    FlexibleTopBarWithBackButton(
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(id)
+                Spacer(Modifier.weight(1f))
+                IconButton(
+                    modifier = Modifier.size(40.dp),
+                    onClick = {
+                        moreActionsExpanded = true
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.more_options),
+                        tint = MaterialTheme.colorScheme.placeholderText,
+                    )
+
+                    DropdownMenu(expanded = moreActionsExpanded, onDismissRequest = { moreActionsExpanded = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.backup_seed)) },
+                            onClick = { showBackupSeedDialog = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.set_custom_restore_height)) },
+                            enabled = maxRestoreHeight != 0L,
+                            onClick = { showCustomRestoreHeightDialog = true },
+                        )
+                    }
+                }
+            }
+        },
+        popBack = navPopBack,
+    )
+
+    if (showBackupSeedDialog) {
+        BackupSeedDialog(
+            accountViewModel.account.moneroSeed!!,
+            onDismiss = {
+                showBackupSeedDialog = false
+                moreActionsExpanded = false
+            },
+        )
+    }
+
+    if (showCustomRestoreHeightDialog) {
+        CustomRestoreHeightDialog(
+            maxHeight = maxRestoreHeight,
+            onDismiss = {
+                showCustomRestoreHeightDialog = false
+                moreActionsExpanded = false
+            },
+        ) {
+            scope.launch { accountViewModel.account.setMoneroRestoreHeight(it) }
+            showCustomRestoreHeightDialog = false
+            moreActionsExpanded = false
         }
     }
 }

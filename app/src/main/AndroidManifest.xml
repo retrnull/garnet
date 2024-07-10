@@ -121,6 +121,7 @@
             </intent-filter>
         </service>
 
+        <service android:name=".service.WalletService"/>
     </application>
 
 </manifest>

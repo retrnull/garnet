@@ -47,6 +47,7 @@ import com.vitorpamplona.amethyst.service.NostrSingleUserDataSource
 import com.vitorpamplona.amethyst.service.NostrThreadDataSource
 import com.vitorpamplona.amethyst.service.NostrUserProfileDataSource
 import com.vitorpamplona.amethyst.service.NostrVideoDataSource
+import com.vitorpamplona.amethyst.service.TipEventDataSource
 import com.vitorpamplona.amethyst.service.relays.Client
 import com.vitorpamplona.quartz.encoders.bechToBytes
 import com.vitorpamplona.quartz.encoders.decodePublicKeyAsHexOrNull
@@ -121,6 +122,9 @@ class ServiceManager {
                 }
 
             // start services
+            TipEventDataSource.account = myAccount
+            TipEventDataSource.start()
+
             NostrAccountDataSource.account = myAccount
             NostrAccountDataSource.otherAccounts =
                 LocalPreferences.allSavedAccounts().mapNotNull {
@@ -150,6 +154,7 @@ class ServiceManager {
             NostrSingleEventDataSource.start()
             NostrSingleChannelDataSource.start()
             NostrSingleUserDataSource.start()
+
             isStarted = true
         }
     }
@@ -160,6 +165,7 @@ class ServiceManager {
         collectorJob?.cancel()
         collectorJob = null
 
+        TipEventDataSource.stop()
         NostrAccountDataSource.stopSync()
         NostrHomeDataSource.stopSync()
         NostrChannelDataSource.stopSync()
@@ -246,5 +252,11 @@ class ServiceManager {
     fun pauseForGoodAndClearAccount() {
         account = null
         forceRestart(null, false, true)
+    }
+
+    fun stopMonero() {
+        account?.let {
+            it.stopMonero()
+        }
     }
 }

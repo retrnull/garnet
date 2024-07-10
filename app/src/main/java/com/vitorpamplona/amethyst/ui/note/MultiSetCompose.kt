@@ -88,8 +88,10 @@ import com.vitorpamplona.amethyst.ui.theme.overPictureBackground
 import com.vitorpamplona.amethyst.ui.theme.profile35dpModifier
 import com.vitorpamplona.quartz.encoders.Nip30CustomEmoji
 import com.vitorpamplona.quartz.events.EmptyTagList
+import com.vitorpamplona.quartz.events.TipEvent
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import kotlin.time.ExperimentalTime
 
@@ -118,7 +120,8 @@ fun MultiSetCompose(
 
     val columnModifier =
         remember(backgroundColor.value) {
-            Modifier.fillMaxWidth()
+            Modifier
+                .fillMaxWidth()
                 .background(backgroundColor.value)
                 .combinedClickable(
                     onClick = {
@@ -164,6 +167,7 @@ private fun Galeries(
     nav: (String) -> Unit,
 ) {
     val hasZapEvents by remember { derivedStateOf { multiSetCard.zapEvents.isNotEmpty() } }
+    val hasTipEvents by remember { derivedStateOf { multiSetCard.tipEvents.isNotEmpty() } }
     val hasBoostEvents by remember { derivedStateOf { multiSetCard.boostEvents.isNotEmpty() } }
     val hasLikeEvents by remember { derivedStateOf { multiSetCard.likeEvents.isNotEmpty() } }
 
@@ -180,6 +184,27 @@ private fun Galeries(
         }
 
         RenderZapGallery(zapEvents, backgroundColor, nav, accountViewModel)
+    }
+
+    if (hasTipEvents) {
+        val tipEvents
+            by remember {
+                derivedStateOf {
+                    multiSetCard.tipEvents.mapNotNull {
+                        val tipEvent = (it.event as? TipEvent)
+                        tipEvent?.let { tipEvent ->
+                            val proof = tipEvent.tipProof() ?: return@mapNotNull null
+                            TipAmountCommentNotification(
+                                it.author,
+                                proof.message,
+                                null,
+                            )
+                        }
+                    }
+                        .toImmutableList()
+                }
+            }
+        RenderTipGallery(tipEvents, backgroundColor, nav, accountViewModel)
     }
 
     if (hasBoostEvents) {
@@ -246,11 +271,41 @@ fun RenderZapGallery(
             modifier = WidthAuthorPictureModifier,
         ) {
             ZappedIcon(
-                modifier = remember { Modifier.size(Size25dp).align(Alignment.TopEnd) },
+                modifier =
+                    remember {
+                        Modifier
+                            .size(Size25dp)
+                            .align(Alignment.TopEnd)
+                    },
             )
         }
 
         AuthorGalleryZaps(zapEvents, backgroundColor, nav, accountViewModel)
+    }
+}
+
+@Composable
+fun RenderTipGallery(
+    tipEvents: ImmutableList<TipAmountCommentNotification>,
+    backgroundColor: MutableState<Color>,
+    nav: (String) -> Unit,
+    accountViewModel: AccountViewModel,
+) {
+    Row(Modifier.fillMaxWidth()) {
+        Box(
+            modifier = WidthAuthorPictureModifier,
+        ) {
+            TippedIcon(
+                modifier =
+                    remember {
+                        Modifier
+                            .size(Size25dp)
+                            .align(Alignment.TopEnd)
+                    },
+            )
+        }
+
+        AuthorGalleryTips(tipEvents, backgroundColor, nav, accountViewModel)
     }
 }
 
@@ -267,7 +322,12 @@ fun RenderBoostGallery(
             modifier = NotificationIconModifierSmaller,
         ) {
             RepostedIcon(
-                modifier = remember { Modifier.size(Size20dp).align(Alignment.TopEnd) },
+                modifier =
+                    remember {
+                        Modifier
+                            .size(Size20dp)
+                            .align(Alignment.TopEnd)
+                    },
             )
         }
 
@@ -288,7 +348,12 @@ fun RenderBoostGallery(
             modifier = NotificationIconModifierSmaller,
         ) {
             RepostedIcon(
-                modifier = remember { Modifier.size(Size20dp).align(Alignment.TopEnd) },
+                modifier =
+                    remember {
+                        Modifier
+                            .size(Size20dp)
+                            .align(Alignment.TopEnd)
+                    },
             )
         }
 
@@ -327,8 +392,28 @@ fun AuthorGalleryZaps(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AuthorGalleryTips(
+    authorNotes: ImmutableList<TipAmountCommentNotification>,
+    backgroundColor: MutableState<Color>,
+    nav: (String) -> Unit,
+    accountViewModel: AccountViewModel,
+) {
+    Column(modifier = StdStartPadding) {
+        FlowRow { authorNotes.forEach { RenderTipState(it, backgroundColor, accountViewModel, nav) } }
+    }
+}
+
 @Immutable
 data class ZapAmountCommentNotification(
+    val user: User?,
+    val comment: String?,
+    val amount: String?,
+)
+
+@Immutable
+data class TipAmountCommentNotification(
     val user: User?,
     val comment: String?,
     val amount: String?,
@@ -370,6 +455,13 @@ fun click(
     content.user?.let { nav(routeFor(it)) }
 }
 
+fun tipClick(
+    content: TipAmountCommentNotification,
+    nav: (String) -> Unit,
+) {
+    content.user?.let { nav(routeFor(it)) }
+}
+
 @Composable
 private fun RenderState(
     content: ZapAmountCommentNotification,
@@ -390,9 +482,35 @@ private fun RenderState(
     }
 }
 
-val amountBoxModifier = Modifier.size(Size35dp).clip(shape = CircleShape)
+@Composable
+private fun RenderTipState(
+    content: TipAmountCommentNotification,
+    backgroundColor: MutableState<Color>,
+    accountViewModel: AccountViewModel,
+    nav: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.clickable { tipClick(content, nav) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DisplayAuthorCommentAndAmount(
+            authorComment = content,
+            backgroundColor = backgroundColor,
+            nav = nav,
+            accountViewModel = accountViewModel,
+        )
+    }
+}
 
-val textBoxModifier = Modifier.padding(start = 5.dp).fillMaxWidth()
+val amountBoxModifier =
+    Modifier
+        .size(Size35dp)
+        .clip(shape = CircleShape)
+
+val textBoxModifier =
+    Modifier
+        .padding(start = 5.dp)
+        .fillMaxWidth()
 
 val bottomPadding1dp = Modifier.padding(bottom = 1.dp)
 
@@ -419,6 +537,26 @@ private fun DisplayAuthorCommentAndAmount(
 }
 
 @Composable
+private fun DisplayAuthorCommentAndAmount(
+    authorComment: TipAmountCommentNotification,
+    backgroundColor: MutableState<Color>,
+    nav: (String) -> Unit,
+    accountViewModel: AccountViewModel,
+) {
+    Box(modifier = Size35Modifier, contentAlignment = Alignment.BottomCenter) {
+        WatchUserMetadataAndFollowsAndRenderUserProfilePictureOrDefaultAuthor(
+            authorComment.user,
+            accountViewModel,
+        )
+        authorComment.amount?.let { CrossfadeToDisplayAmount(it) }
+    }
+
+    authorComment.comment?.let {
+        CrossfadeToDisplayComment(it, backgroundColor, nav, accountViewModel)
+    }
+}
+
+@Composable
 fun CrossfadeToDisplayAmount(amount: String) {
     Box(
         modifier = amountBoxModifier,
@@ -426,7 +564,12 @@ fun CrossfadeToDisplayAmount(amount: String) {
     ) {
         val backgroundColor = MaterialTheme.colorScheme.overPictureBackground
         Box(
-            modifier = remember { Modifier.width(Size35dp).background(backgroundColor) },
+            modifier =
+                remember {
+                    Modifier
+                        .width(Size35dp)
+                        .background(backgroundColor)
+                },
             contentAlignment = Alignment.BottomCenter,
         ) {
             Text(

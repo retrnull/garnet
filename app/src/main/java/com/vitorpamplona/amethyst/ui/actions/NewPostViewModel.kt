@@ -66,6 +66,7 @@ import com.vitorpamplona.quartz.events.GitIssueEvent
 import com.vitorpamplona.quartz.events.Price
 import com.vitorpamplona.quartz.events.PrivateDmEvent
 import com.vitorpamplona.quartz.events.TextNoteEvent
+import com.vitorpamplona.quartz.events.TipSplitSetup
 import com.vitorpamplona.quartz.events.ZapSplitSetup
 import com.vitorpamplona.quartz.events.findURLs
 import kotlinx.coroutines.CancellationException
@@ -83,6 +84,7 @@ import java.util.UUID
 enum class UserSuggestionAnchor {
     MAIN_MESSAGE,
     FORWARD_ZAPS,
+    FORWARD_TIPS,
     TO_USERS,
 }
 
@@ -101,14 +103,12 @@ open class NewPostViewModel() : ViewModel() {
     var eTags by mutableStateOf<List<Note>?>(null)
 
     var nip94attachments by mutableStateOf<List<FileHeaderEvent>>(emptyList())
-    var nip95attachments by
-        mutableStateOf<List<Pair<FileStorageEvent, FileStorageHeaderEvent>>>(emptyList())
+    var nip95attachments by mutableStateOf<List<Pair<FileStorageEvent, FileStorageHeaderEvent>>>(emptyList())
 
     var message by mutableStateOf(TextFieldValue(""))
     var urlPreview by mutableStateOf<String?>(null)
     var isUploadingImage by mutableStateOf(false)
-    val imageUploadingError =
-        MutableSharedFlow<String?>(0, 3, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val imageUploadingError = MutableSharedFlow<String?>(0, 3, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     var userSuggestions by mutableStateOf<List<User>>(emptyList())
     var userSuggestionAnchor: TextRange? = null
@@ -144,8 +144,7 @@ open class NewPostViewModel() : ViewModel() {
     var price by mutableStateOf(TextFieldValue(""))
     var locationText by mutableStateOf(TextFieldValue(""))
     var category by mutableStateOf(TextFieldValue(""))
-    var condition by
-        mutableStateOf<ClassifiedsEvent.CONDITION>(ClassifiedsEvent.CONDITION.USED_LIKE_NEW)
+    var condition by mutableStateOf<ClassifiedsEvent.CONDITION>(ClassifiedsEvent.CONDITION.USED_LIKE_NEW)
 
     // Invoices
     var canAddInvoice by mutableStateOf(false)
@@ -155,6 +154,10 @@ open class NewPostViewModel() : ViewModel() {
     var wantsForwardZapTo by mutableStateOf(false)
     var forwardZapTo by mutableStateOf<Split<User>>(Split())
     var forwardZapToEditting by mutableStateOf(TextFieldValue(""))
+
+    var wantsForwardTipTo by mutableStateOf(false)
+    var forwardTipTo by mutableStateOf<Split<User>>(Split())
+    var forwardTipToEditting by mutableStateOf(TextFieldValue(""))
 
     // NSFW, Sensitive
     var wantsToMarkAsSensitive by mutableStateOf(false)
@@ -223,9 +226,7 @@ open class NewPostViewModel() : ViewModel() {
 
                 if (replyNote.event !is CommunityDefinitionEvent) {
                     replyNote.author?.let { replyUser ->
-                        val currentMentions =
-                            (replyNote.event as? TextNoteEvent)?.mentions()?.map { LocalCache.getOrCreateUser(it) }
-                                ?: emptyList()
+                        val currentMentions = (replyNote.event as? TextNoteEvent)?.mentions()?.map { LocalCache.getOrCreateUser(it) } ?: emptyList()
 
                         if (currentMentions.contains(replyUser)) {
                             this.pTags = currentMentions
@@ -234,11 +235,10 @@ open class NewPostViewModel() : ViewModel() {
                         }
                     }
                 }
+            } ?: run {
+                eTags = null
+                pTags = null
             }
-                ?: run {
-                    eTags = null
-                    pTags = null
-                }
 
             canAddInvoice = accountViewModel.userProfile().info?.lnAddress() != null
             canAddZapRaiser = accountViewModel.userProfile().info?.lnAddress() != null
@@ -250,16 +250,27 @@ open class NewPostViewModel() : ViewModel() {
                 urlPreview = findUrlInMessage()
 
                 it.author?.let { quotedUser ->
-                    if (quotedUser.pubkeyHex != accountViewModel.userProfile().pubkeyHex) {
+                    val user = accountViewModel.userProfile()
+                    if (quotedUser.pubkeyHex != user.pubkeyHex) {
                         if (forwardZapTo.items.none { it.key.pubkeyHex == quotedUser.pubkeyHex }) {
                             forwardZapTo.addItem(quotedUser)
                         }
-                        if (forwardZapTo.items.none { it.key.pubkeyHex == accountViewModel.userProfile().pubkeyHex }) {
+                        if (forwardZapTo.items.none { it.key.pubkeyHex == user.pubkeyHex }) {
                             forwardZapTo.addItem(accountViewModel.userProfile())
                         }
 
-                        val pos = forwardZapTo.items.indexOfFirst { it.key.pubkeyHex == quotedUser.pubkeyHex }
-                        forwardZapTo.updatePercentage(pos, 0.9f)
+                        val zapItemPos = forwardZapTo.items.indexOfFirst { it.key.pubkeyHex == quotedUser.pubkeyHex }
+                        forwardZapTo.updatePercentage(zapItemPos, 0.9f)
+
+                        if (quotedUser.info?.moneroAddress() != null && forwardTipTo.items.none { it.key.pubkeyHex == quotedUser.pubkeyHex }) {
+                            forwardTipTo.addItem(quotedUser)
+                        }
+                        if (user.info?.moneroAddress() != null && forwardTipTo.items.none { it.key.pubkeyHex == user.pubkeyHex }) {
+                            forwardTipTo.addItem(accountViewModel.userProfile())
+                        }
+
+                        val tipItemPos = forwardTipTo.items.indexOfFirst { it.key.pubkeyHex == quotedUser.pubkeyHex }
+                        forwardTipTo.updatePercentage(tipItemPos, 0.9f)
                     }
                 }
             }
@@ -286,15 +297,37 @@ open class NewPostViewModel() : ViewModel() {
                     }
                 }
 
+                it.event?.tipSplitSetup()?.let {
+                    val totalWeight =
+                        if (it.any { it.weight != null }) {
+                            it.sumOf { if (it.isAddress) 0.0 else it.weight ?: 0.0 }
+                        } else {
+                            it.size.toDouble()
+                        }
+
+                    it.forEach {
+                        if (!it.isAddress) {
+                            forwardTipTo.addItem(LocalCache.getOrCreateUser(it.addressOrPubKeyHex), ((it.weight ?: 1.0) / totalWeight).toFloat())
+                        }
+                    }
+                }
+
                 // Only adds if it is not already set up.
                 if (forwardZapTo.items.isEmpty()) {
                     it.author?.let { forkedAuthor ->
-                        if (forkedAuthor.pubkeyHex != accountViewModel.userProfile().pubkeyHex) {
+                        val user = accountViewModel.userProfile()
+                        if (forkedAuthor.pubkeyHex != user.pubkeyHex) {
                             if (forwardZapTo.items.none { it.key.pubkeyHex == forkedAuthor.pubkeyHex }) forwardZapTo.addItem(forkedAuthor)
-                            if (forwardZapTo.items.none { it.key.pubkeyHex == accountViewModel.userProfile().pubkeyHex }) forwardZapTo.addItem(accountViewModel.userProfile())
+                            if (forwardZapTo.items.none { it.key.pubkeyHex == user.pubkeyHex }) forwardZapTo.addItem(user)
 
-                            val pos = forwardZapTo.items.indexOfFirst { it.key.pubkeyHex == forkedAuthor.pubkeyHex }
-                            forwardZapTo.updatePercentage(pos, 0.8f)
+                            val zapItemPos = forwardZapTo.items.indexOfFirst { it.key.pubkeyHex == forkedAuthor.pubkeyHex }
+                            forwardZapTo.updatePercentage(zapItemPos, 0.8f)
+
+                            if (forkedAuthor.info?.moneroAddress() != null && forwardTipTo.items.none { it.key.pubkeyHex == forkedAuthor.pubkeyHex }) forwardTipTo.addItem(forkedAuthor)
+                            if (user.info?.moneroAddress() != null && forwardTipTo.items.none { it.key.pubkeyHex == user.pubkeyHex }) forwardTipTo.addItem(user)
+
+                            val tipItemPos = forwardTipTo.items.indexOfFirst { it.key.pubkeyHex == forkedAuthor.pubkeyHex }
+                            forwardTipTo.updatePercentage(tipItemPos, 0.8f)
                         }
                     }
                 }
@@ -314,6 +347,10 @@ open class NewPostViewModel() : ViewModel() {
 
             if (!forwardZapTo.items.isEmpty()) {
                 wantsForwardZapTo = true
+            }
+
+            if (!forwardTipTo.items.isEmpty()) {
+                wantsForwardTipTo = true
             }
         }
     }
@@ -338,6 +375,24 @@ open class NewPostViewModel() : ViewModel() {
         }
         forwardZapToEditting = TextFieldValue("")
         wantsForwardZapTo = localfowardZapTo.isNotEmpty()
+
+        val localForwardTipTo = draftEvent.tags().filter { it.size > 1 && it[0] == "monero" }
+        forwardTipTo = Split()
+        localForwardTipTo.forEach {
+            val isAddress = it[1].length == 95
+            if (isAddress) {
+                return
+            }
+
+            val user = LocalCache.checkGetOrCreateUser(it[1])
+            val relay = it.getOrNull(2)
+            val weight = it.getOrNull(3)?.toFloatOrNull() ?: 0f
+            if (user != null && relay != null) {
+                forwardTipTo.addItem(user, weight)
+            }
+        }
+        forwardTipToEditting = TextFieldValue("")
+        wantsForwardTipTo = forwardTipTo.items.isNotEmpty()
 
         wantsToMarkAsSensitive = draftEvent.tags().any { it.size > 1 && it[0] == "content-warning" }
         wantsToAddGeoHash = draftEvent.tags().any { it.size > 1 && it[0] == "g" }
@@ -486,6 +541,22 @@ open class NewPostViewModel() : ViewModel() {
                 null
             }
 
+        val tipReceiver =
+            if (wantsForwardTipTo) {
+                forwardTipTo.items.map {
+                    TipSplitSetup(
+                        it.key.pubkeyHex,
+                        it.key.relaysBeingUsed.keys.firstOrNull(),
+                        it.percentage.toDouble(),
+                        false,
+                    )
+                }
+            } else {
+                account?.let {
+                    listOf(TipSplitSetup(it.newSubaddress(""), null, 1.0, true))
+                }
+            }
+
         val geoLocation = locUtil?.locationStateFlow?.value
         val geoHash =
             if (wantsToAddGeoHash && geoLocation != null) {
@@ -515,6 +586,7 @@ open class NewPostViewModel() : ViewModel() {
                     replyTo = tagger.eTags,
                     mentions = tagger.pTags,
                     zapReceiver = zapReceiver,
+                    tipReceiver = tipReceiver,
                     wantsToMarkAsSensitive = wantsToMarkAsSensitive,
                     zapRaiserAmount = localZapRaiserAmount,
                     geohash = geoHash,
@@ -528,6 +600,7 @@ open class NewPostViewModel() : ViewModel() {
                     replyTo = tagger.eTags,
                     mentions = tagger.pTags,
                     zapReceiver = zapReceiver,
+                    tipReceiver = tipReceiver,
                     wantsToMarkAsSensitive = wantsToMarkAsSensitive,
                     zapRaiserAmount = localZapRaiserAmount,
                     geohash = geoHash,
@@ -542,6 +615,7 @@ open class NewPostViewModel() : ViewModel() {
                 replyingTo = originalNote!!,
                 mentions = tagger.pTags,
                 zapReceiver = zapReceiver,
+                tipReceiver = tipReceiver,
                 wantsToMarkAsSensitive = wantsToMarkAsSensitive,
                 zapRaiserAmount = localZapRaiserAmount,
                 geohash = geoHash,
@@ -549,13 +623,7 @@ open class NewPostViewModel() : ViewModel() {
                 draftTag = localDraft,
             )
         } else if (originalNote?.event is ChatMessageEvent) {
-            val receivers =
-                (originalNote?.event as ChatMessageEvent)
-                    .recipientsPubKey()
-                    .plus(originalNote?.author?.pubkeyHex)
-                    .filterNotNull()
-                    .toSet()
-                    .toList()
+            val receivers = (originalNote?.event as ChatMessageEvent).recipientsPubKey().plus(originalNote?.author?.pubkeyHex).filterNotNull().toSet().toList()
 
             account?.sendNIP24PrivateMessage(
                 message = tagger.message,
@@ -566,6 +634,7 @@ open class NewPostViewModel() : ViewModel() {
                 wantsToMarkAsSensitive = wantsToMarkAsSensitive,
                 zapReceiver = zapReceiver,
                 zapRaiserAmount = localZapRaiserAmount,
+                tipReceiver = tipReceiver,
                 geohash = geoHash,
                 nip94attachments = usedAttachments,
                 draftTag = localDraft,
@@ -581,6 +650,7 @@ open class NewPostViewModel() : ViewModel() {
                     wantsToMarkAsSensitive = wantsToMarkAsSensitive,
                     zapReceiver = zapReceiver,
                     zapRaiserAmount = localZapRaiserAmount,
+                    tipReceiver = tipReceiver,
                     geohash = geoHash,
                     nip94attachments = usedAttachments,
                     draftTag = localDraft,
@@ -594,6 +664,7 @@ open class NewPostViewModel() : ViewModel() {
                     wantsToMarkAsSensitive = wantsToMarkAsSensitive,
                     zapReceiver = zapReceiver,
                     zapRaiserAmount = localZapRaiserAmount,
+                    tipReceiver = tipReceiver,
                     geohash = geoHash,
                     nip94attachments = usedAttachments,
                     draftTag = localDraft,
@@ -604,10 +675,7 @@ open class NewPostViewModel() : ViewModel() {
             // adds markers
             val rootId =
                 originalNoteEvent.rootIssueOrPatch() // if it has a marker as root
-                    ?: originalNote
-                        ?.replyTo
-                        ?.firstOrNull { it.event != null && it.replyTo?.isEmpty() == true }
-                        ?.idHex // if it has loaded events with zero replies in the reply list
+                    ?: originalNote?.replyTo?.firstOrNull { it.event != null && it.replyTo?.isEmpty() == true }?.idHex // if it has loaded events with zero replies in the reply list
                     ?: originalNote?.replyTo?.firstOrNull()?.idHex // old rules, first item is root.
                     ?: originalNote?.idHex
 
@@ -630,6 +698,7 @@ open class NewPostViewModel() : ViewModel() {
                 zapReceiver = zapReceiver,
                 wantsToMarkAsSensitive = wantsToMarkAsSensitive,
                 zapRaiserAmount = localZapRaiserAmount,
+                tipReceiver = tipReceiver,
                 replyingTo = replyId,
                 root = rootId,
                 directMentions = tagger.directMentions,
@@ -670,6 +739,7 @@ open class NewPostViewModel() : ViewModel() {
                     category = category.text,
                     directMentions = tagger.directMentions,
                     zapReceiver = zapReceiver,
+                    tipReceiver = tipReceiver,
                     wantsToMarkAsSensitive = wantsToMarkAsSensitive,
                     zapRaiserAmount = localZapRaiserAmount,
                     relayList = relayList,
@@ -681,10 +751,7 @@ open class NewPostViewModel() : ViewModel() {
                 // adds markers
                 val rootId =
                     (originalNote?.event as? TextNoteEvent)?.root() // if it has a marker as root
-                        ?: originalNote
-                            ?.replyTo
-                            ?.firstOrNull { it.event != null && it.replyTo?.isEmpty() == true }
-                            ?.idHex // if it has loaded events with zero replies in the reply list
+                        ?: originalNote?.replyTo?.firstOrNull { it.event != null && it.replyTo?.isEmpty() == true }?.idHex // if it has loaded events with zero replies in the reply list
                         ?: originalNote?.replyTo?.firstOrNull()?.idHex // old rules, first item is root.
                         ?: originalNote?.idHex
 
@@ -705,6 +772,7 @@ open class NewPostViewModel() : ViewModel() {
                     zapReceiver = zapReceiver,
                     wantsToMarkAsSensitive = wantsToMarkAsSensitive,
                     zapRaiserAmount = localZapRaiserAmount,
+                    tipReceiver = tipReceiver,
                     replyingTo = replyId,
                     root = rootId,
                     directMentions = tagger.directMentions,
@@ -733,58 +801,56 @@ open class NewPostViewModel() : ViewModel() {
         val contentType = contentResolver.getType(galleryUri)
 
         viewModelScope.launch(Dispatchers.IO) {
-            MediaCompressor()
-                .compress(
-                    galleryUri,
-                    contentType,
-                    context.applicationContext,
-                    onReady = { fileUri, contentType, size ->
-                        if (server.isNip95) {
-                            contentResolver.openInputStream(fileUri)?.use {
-                                createNIP95Record(it.readBytes(), contentType, alt, sensitiveContent)
-                            }
-                        } else {
-                            viewModelScope.launch(Dispatchers.IO) {
-                                try {
-                                    val result =
-                                        Nip96Uploader(account)
-                                            .uploadImage(
-                                                uri = fileUri,
-                                                contentType = contentType,
-                                                size = size,
-                                                alt = alt,
-                                                sensitiveContent = if (sensitiveContent) "" else null,
-                                                server = server.server,
-                                                contentResolver = contentResolver,
-                                                onProgress = {},
-                                            )
-
-                                    createNIP94Record(
-                                        uploadingResult = result,
-                                        localContentType = contentType,
+            MediaCompressor().compress(
+                galleryUri,
+                contentType,
+                context.applicationContext,
+                onReady = { fileUri, contentType, size ->
+                    if (server.isNip95) {
+                        contentResolver.openInputStream(fileUri)?.use {
+                            createNIP95Record(it.readBytes(), contentType, alt, sensitiveContent)
+                        }
+                    } else {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val result =
+                                    Nip96Uploader(account).uploadImage(
+                                        uri = fileUri,
+                                        contentType = contentType,
+                                        size = size,
                                         alt = alt,
-                                        sensitiveContent = sensitiveContent,
+                                        sensitiveContent = if (sensitiveContent) "" else null,
+                                        server = server.server,
+                                        contentResolver = contentResolver,
+                                        onProgress = {},
                                     )
-                                } catch (e: Exception) {
-                                    if (e is CancellationException) throw e
-                                    Log.e(
-                                        "ImageUploader",
-                                        "Failed to upload ${e.message}",
-                                        e,
-                                    )
-                                    isUploadingImage = false
-                                    viewModelScope.launch {
-                                        imageUploadingError.emit("Failed to upload: ${e.message}")
-                                    }
+
+                                createNIP94Record(
+                                    uploadingResult = result,
+                                    localContentType = contentType,
+                                    alt = alt,
+                                    sensitiveContent = sensitiveContent,
+                                )
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
+                                Log.e(
+                                    "ImageUploader",
+                                    "Failed to upload ${e.message}",
+                                    e,
+                                )
+                                isUploadingImage = false
+                                viewModelScope.launch {
+                                    imageUploadingError.emit("Failed to upload: ${e.message}")
                                 }
                             }
                         }
-                    },
-                    onError = {
-                        isUploadingImage = false
-                        viewModelScope.launch { imageUploadingError.emit(it) }
-                    },
-                )
+                    }
+                },
+                onError = {
+                    isUploadingImage = false
+                    viewModelScope.launch { imageUploadingError.emit(it) }
+                },
+            )
         }
     }
 
@@ -827,6 +893,10 @@ open class NewPostViewModel() : ViewModel() {
         forwardZapTo = Split()
         forwardZapToEditting = TextFieldValue("")
 
+        wantsForwardTipTo = false
+        forwardTipTo = Split()
+        forwardTipToEditting = TextFieldValue("")
+
         userSuggestions = emptyList()
         userSuggestionAnchor = null
         userSuggestionsMainMessage = null
@@ -863,17 +933,13 @@ open class NewPostViewModel() : ViewModel() {
         urlPreview = findUrlInMessage()
 
         if (it.selection.collapsed) {
-            val lastWord =
-                it.text.substring(0, it.selection.end).substringAfterLast("\n").substringAfterLast(" ")
+            val lastWord = it.text.substring(0, it.selection.end).substringAfterLast("\n").substringAfterLast(" ")
             userSuggestionAnchor = it.selection
             userSuggestionsMainMessage = UserSuggestionAnchor.MAIN_MESSAGE
             if (lastWord.startsWith("@") && lastWord.length > 2) {
                 NostrSearchEventOrUserDataSource.search(lastWord.removePrefix("@"))
                 viewModelScope.launch(Dispatchers.IO) {
-                    userSuggestions =
-                        LocalCache.findUsersStartingWith(lastWord.removePrefix("@"))
-                            .sortedWith(compareBy({ account?.isFollowing(it) }, { it.toBestDisplayName() }, { it.pubkeyHex }))
-                            .reversed()
+                    userSuggestions = LocalCache.findUsersStartingWith(lastWord.removePrefix("@")).sortedWith(compareBy({ account?.isFollowing(it) }, { it.toBestDisplayName() }, { it.pubkeyHex })).reversed()
                 }
             } else {
                 NostrSearchEventOrUserDataSource.clear()
@@ -888,17 +954,13 @@ open class NewPostViewModel() : ViewModel() {
         toUsers = it
 
         if (it.selection.collapsed) {
-            val lastWord =
-                it.text.substring(0, it.selection.end).substringAfterLast("\n").substringAfterLast(" ")
+            val lastWord = it.text.substring(0, it.selection.end).substringAfterLast("\n").substringAfterLast(" ")
             userSuggestionAnchor = it.selection
             userSuggestionsMainMessage = UserSuggestionAnchor.TO_USERS
             if (lastWord.startsWith("@") && lastWord.length > 2) {
                 NostrSearchEventOrUserDataSource.search(lastWord.removePrefix("@"))
                 viewModelScope.launch(Dispatchers.IO) {
-                    userSuggestions =
-                        LocalCache.findUsersStartingWith(lastWord.removePrefix("@"))
-                            .sortedWith(compareBy({ account?.isFollowing(it) }, { it.toBestDisplayName() }, { it.pubkeyHex }))
-                            .reversed()
+                    userSuggestions = LocalCache.findUsersStartingWith(lastWord.removePrefix("@")).sortedWith(compareBy({ account?.isFollowing(it) }, { it.toBestDisplayName() }, { it.pubkeyHex })).reversed()
                 }
             } else {
                 NostrSearchEventOrUserDataSource.clear()
@@ -923,15 +985,38 @@ open class NewPostViewModel() : ViewModel() {
                 NostrSearchEventOrUserDataSource.search(lastWord.removePrefix("@"))
                 viewModelScope.launch(Dispatchers.IO) {
                     userSuggestions =
-                        LocalCache.findUsersStartingWith(lastWord.removePrefix("@"))
-                            .sortedWith(
-                                compareBy(
-                                    { account?.isFollowing(it) },
-                                    { it.toBestDisplayName() },
-                                    { it.pubkeyHex },
-                                ),
-                            )
-                            .reversed()
+                        LocalCache.findUsersStartingWith(lastWord.removePrefix("@")).sortedWith(
+                            compareBy(
+                                { account?.isFollowing(it) },
+                                { it.toBestDisplayName() },
+                                { it.pubkeyHex },
+                            ),
+                        ).reversed()
+                }
+            } else {
+                NostrSearchEventOrUserDataSource.clear()
+                userSuggestions = emptyList()
+            }
+        }
+    }
+
+    open fun updateTipForwardTo(it: TextFieldValue) {
+        forwardTipToEditting = it
+        if (it.selection.collapsed) {
+            val lastWord = it.text
+            userSuggestionAnchor = it.selection
+            userSuggestionsMainMessage = UserSuggestionAnchor.FORWARD_TIPS
+            if (lastWord.length > 2) {
+                NostrSearchEventOrUserDataSource.search(lastWord.removePrefix("@"))
+                viewModelScope.launch(Dispatchers.IO) {
+                    userSuggestions =
+                        LocalCache.findUsersStartingWith(lastWord.removePrefix("@")).sortedWith(
+                            compareBy(
+                                { account?.isFollowing(it) },
+                                { it.toBestDisplayName() },
+                                { it.pubkeyHex },
+                            ),
+                        ).reversed()
                 }
             } else {
                 NostrSearchEventOrUserDataSource.clear()
@@ -943,8 +1028,7 @@ open class NewPostViewModel() : ViewModel() {
     open fun autocompleteWithUser(item: User) {
         userSuggestionAnchor?.let {
             if (userSuggestionsMainMessage == UserSuggestionAnchor.MAIN_MESSAGE) {
-                val lastWord =
-                    message.text.substring(0, it.end).substringAfterLast("\n").substringAfterLast(" ")
+                val lastWord = message.text.substring(0, it.end).substringAfterLast("\n").substringAfterLast(" ")
                 val lastWordStart = it.end - lastWord.length
                 val wordToInsert = "@${item.pubkeyNpub()}"
 
@@ -956,9 +1040,11 @@ open class NewPostViewModel() : ViewModel() {
             } else if (userSuggestionsMainMessage == UserSuggestionAnchor.FORWARD_ZAPS) {
                 forwardZapTo.addItem(item)
                 forwardZapToEditting = TextFieldValue("")
+            } else if (userSuggestionsMainMessage == UserSuggestionAnchor.FORWARD_TIPS) {
+                forwardTipTo.addItem(item)
+                forwardTipToEditting = TextFieldValue("")
             } else if (userSuggestionsMainMessage == UserSuggestionAnchor.TO_USERS) {
-                val lastWord =
-                    toUsers.text.substring(0, it.end).substringAfterLast("\n").substringAfterLast(" ")
+                val lastWord = toUsers.text.substring(0, it.end).substringAfterLast("\n").substringAfterLast(" ")
                 val lastWordStart = it.end - lastWord.length
                 val wordToInsert = "@${item.pubkeyNpub()}"
 
@@ -982,28 +1068,7 @@ open class NewPostViewModel() : ViewModel() {
     }
 
     fun canPost(): Boolean {
-        return message.text.isNotBlank() &&
-            !isUploadingImage &&
-            !wantsInvoice &&
-            (!wantsZapraiser || zapRaiserAmount != null) &&
-            (!wantsDirectMessage || !toUsers.text.isNullOrBlank()) &&
-            (
-                !wantsPoll ||
-                    (
-                        pollOptions.values.all { it.isNotEmpty() } &&
-                            isValidvalueMinimum.value &&
-                            isValidvalueMaximum.value
-                    )
-            ) &&
-            (
-                !wantsProduct ||
-                    (
-                        !title.text.isNullOrBlank() &&
-                            !price.text.isNullOrBlank() &&
-                            !category.text.isNullOrBlank()
-                    )
-            ) &&
-            contentToAddUrl == null
+        return message.text.isNotBlank() && !isUploadingImage && !wantsInvoice && (!wantsZapraiser || zapRaiserAmount != null) && (!wantsDirectMessage || !toUsers.text.isNullOrBlank()) && (!wantsPoll || (pollOptions.values.all { it.isNotEmpty() } && isValidvalueMinimum.value && isValidvalueMaximum.value)) && (!wantsProduct || (!title.text.isNullOrBlank() && !price.text.isNullOrBlank() && !category.text.isNullOrBlank())) && contentToAddUrl == null
     }
 
     suspend fun createNIP94Record(
@@ -1014,17 +1079,10 @@ open class NewPostViewModel() : ViewModel() {
     ) {
         // Images don't seem to be ready immediately after upload
         val imageUrl = uploadingResult.tags?.firstOrNull { it.size > 1 && it[0] == "url" }?.get(1)
-        val remoteMimeType =
-            uploadingResult.tags?.firstOrNull { it.size > 1 && it[0] == "m" }?.get(1)?.ifBlank { null }
-        val originalHash =
-            uploadingResult.tags?.firstOrNull { it.size > 1 && it[0] == "ox" }?.get(1)?.ifBlank { null }
-        val dim =
-            uploadingResult.tags?.firstOrNull { it.size > 1 && it[0] == "dim" }?.get(1)?.ifBlank { null }
-        val magnet =
-            uploadingResult.tags
-                ?.firstOrNull { it.size > 1 && it[0] == "magnet" }
-                ?.get(1)
-                ?.ifBlank { null }
+        val remoteMimeType = uploadingResult.tags?.firstOrNull { it.size > 1 && it[0] == "m" }?.get(1)?.ifBlank { null }
+        val originalHash = uploadingResult.tags?.firstOrNull { it.size > 1 && it[0] == "ox" }?.get(1)?.ifBlank { null }
+        val dim = uploadingResult.tags?.firstOrNull { it.size > 1 && it[0] == "dim" }?.get(1)?.ifBlank { null }
+        val magnet = uploadingResult.tags?.firstOrNull { it.size > 1 && it[0] == "magnet" }?.get(1)?.ifBlank { null }
 
         if (imageUrl.isNullOrBlank()) {
             Log.e("ImageDownload", "Couldn't download image from server")
@@ -1109,8 +1167,7 @@ open class NewPostViewModel() : ViewModel() {
     fun startLocation(context: Context) {
         locUtil = LocationUtil(context)
         locUtil?.let {
-            location =
-                it.locationStateFlow.mapLatest { it.toGeoHash(GeohashPrecision.KM_5_X_5.digits).toString() }
+            location = it.locationStateFlow.mapLatest { it.toGeoHash(GeohashPrecision.KM_5_X_5.digits).toString() }
             saveDraft()
         }
         viewModelScope.launch(Dispatchers.IO) { locUtil?.start() }
@@ -1198,6 +1255,13 @@ open class NewPostViewModel() : ViewModel() {
         forwardZapTo.updatePercentage(index, sliderValue)
     }
 
+    fun updateTipPercentage(
+        index: Int,
+        sliderValue: Float,
+    ) {
+        forwardTipTo.updatePercentage(index, sliderValue)
+    }
+
     fun updateZapFromText() {
         viewModelScope.launch(Dispatchers.Default) {
             val tagger = NewMessageTagger(message.text, emptyList(), emptyList(), null, accountViewModel!!)
@@ -1205,6 +1269,18 @@ open class NewPostViewModel() : ViewModel() {
             tagger.pTags?.forEach { taggedUser ->
                 if (!forwardZapTo.items.any { it.key == taggedUser }) {
                     forwardZapTo.addItem(taggedUser)
+                }
+            }
+        }
+    }
+
+    fun updateTipFromText() {
+        viewModelScope.launch(Dispatchers.Default) {
+            val tagger = NewMessageTagger(message.text, emptyList(), emptyList(), null, accountViewModel!!)
+            tagger.run()
+            tagger.pTags?.forEach { taggedUser ->
+                if (taggedUser.info?.moneroAddress() != null && !forwardTipTo.items.any { it.key == taggedUser }) {
+                    forwardTipTo.addItem(taggedUser)
                 }
             }
         }

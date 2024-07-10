@@ -165,6 +165,8 @@ class MainActivity : AppCompatActivity() {
             keepPlayingMutex = null
         }
 
+        serviceManager.stopMonero()
+
         super.onDestroy()
     }
 

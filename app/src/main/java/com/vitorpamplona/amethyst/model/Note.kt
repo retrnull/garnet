@@ -61,6 +61,7 @@ import com.vitorpamplona.quartz.events.LnZapRequestEvent
 import com.vitorpamplona.quartz.events.LongTextNoteEvent
 import com.vitorpamplona.quartz.events.PayInvoiceSuccessResponse
 import com.vitorpamplona.quartz.events.RepostEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import com.vitorpamplona.quartz.events.WrappedEvent
 import com.vitorpamplona.quartz.signers.NostrSigner
 import com.vitorpamplona.quartz.utils.TimeUtils
@@ -136,6 +137,12 @@ open class Note(val idHex: String) {
 
     var zapPayments = mapOf<Note, Note?>()
         private set
+
+    var tips: MutableList<Note> = mutableListOf()
+        private set
+
+    val tipsAmount: ULong
+        get() = tips.sumOf { (it.event as? TipEvent)?.totalValue ?: 0UL }
 
     var relays = listOf<RelayBriefInfoCache.RelayBriefInfo>()
         private set
@@ -325,6 +332,7 @@ open class Note(val idHex: String) {
         val repliesChanged = replies.isNotEmpty()
         val reactionsChanged = reactions.isNotEmpty()
         val zapsChanged = zaps.isNotEmpty() || zapPayments.isNotEmpty()
+        val tipsChanged = tips.isNotEmpty()
         val boostsChanged = boosts.isNotEmpty()
         val reportsChanged = reports.isNotEmpty()
 
@@ -336,7 +344,8 @@ open class Note(val idHex: String) {
                 zaps.keys +
                 zaps.values.filterNotNull() +
                 zapPayments.keys +
-                zapPayments.values.filterNotNull()
+                zapPayments.values.filterNotNull() +
+                tips
 
         replies = listOf<Note>()
         reactions = mapOf<String, List<Note>>()
@@ -345,6 +354,7 @@ open class Note(val idHex: String) {
         zaps = mapOf<Note, Note?>()
         zapPayments = mapOf<Note, Note?>()
         zapsAmount = BigDecimal.ZERO
+        tips = mutableListOf()
         relays = listOf<RelayBriefInfoCache.RelayBriefInfo>()
         lastReactionsDownloadTime = emptyMap()
 
@@ -353,6 +363,7 @@ open class Note(val idHex: String) {
         if (boostsChanged) liveSet?.innerBoosts?.invalidateData()
         if (reportsChanged) liveSet?.innerReports?.invalidateData()
         if (zapsChanged) liveSet?.innerZaps?.invalidateData()
+        if (tipsChanged) liveSet?.innerTips?.invalidateData()
 
         return toBeRemoved
     }
@@ -407,6 +418,13 @@ open class Note(val idHex: String) {
         } else if (zapPayments.containsValue(note)) {
             zapPayments = zapPayments.filterValues { it != note }
             liveSet?.innerZaps?.invalidateData()
+        }
+    }
+
+    fun removeTip(note: Note) {
+        if (note in tips) {
+            tips -= note
+            liveSet?.innerTips?.invalidateData()
         }
     }
 
@@ -468,6 +486,14 @@ open class Note(val idHex: String) {
             if (inserted) {
                 liveSet?.innerZaps?.invalidateData()
             }
+        }
+    }
+
+    @Synchronized
+    fun addTip(note: Note) {
+        if (note !in tips) {
+            tips += note
+            liveSet?.innerTips?.invalidateData()
         }
     }
 
@@ -613,6 +639,10 @@ open class Note(val idHex: String) {
         onWasZappedByAuthor: () -> Unit,
     ) {
         isZappedByCalculation(option, user, account, zaps, onWasZappedByAuthor)
+    }
+
+    fun isTippedBy(user: User): Boolean {
+        return tips.any { it.author?.pubkeyHex == user.pubkeyHex }
     }
 
     fun getReactionBy(user: User): String? {
@@ -838,6 +868,10 @@ open class Note(val idHex: String) {
             it.key.replyTo = it.key.replyTo?.updated(this, note)
             it.value?.replyTo = it.value?.replyTo?.updated(this, note)
         }
+        tips.forEach {
+            note.addTip(it)
+            it.replyTo = it.replyTo?.updated(this, note)
+        }
 
         replyTo = null
         replies = emptyList()
@@ -846,6 +880,7 @@ open class Note(val idHex: String) {
         reports = emptyMap()
         zaps = emptyMap()
         zapsAmount = BigDecimal.ZERO
+        tips = mutableListOf()
     }
 
     fun clearEOSE() {
@@ -973,6 +1008,7 @@ class NoteLiveSet(u: Note) {
     val innerReports = NoteBundledRefresherLiveData(u)
     val innerRelays = NoteBundledRefresherLiveData(u)
     val innerZaps = NoteBundledRefresherLiveData(u)
+    val innerTips = NoteBundledRefresherLiveData(u)
     val innerOts = NoteBundledRefresherLiveData(u)
     val innerModifications = NoteBundledRefresherLiveData(u)
 
@@ -983,14 +1019,16 @@ class NoteLiveSet(u: Note) {
     val reports = innerReports.map { it }
     val relays = innerRelays.map { it }
     val zaps = innerZaps.map { it }
+    val tips = innerTips.map { it }
 
     val hasEvent = innerMetadata.map { it.note.event != null }.distinctUntilChanged()
 
     val hasReactions =
         innerZaps
-            .combineWith(innerBoosts, innerReactions) { zapState, boostState, reactionState ->
+            .combineWith(innerTips, innerBoosts, innerReactions) { zapState, tipState, boostState, reactionState ->
                 zapState?.note?.zaps?.isNotEmpty()
                     ?: false ||
+                    tipState?.note?.tips?.isNotEmpty() ?: false ||
                     boostState?.note?.boosts?.isNotEmpty() ?: false ||
                     reactionState?.note?.reactions?.isNotEmpty() ?: false
             }
@@ -1021,6 +1059,7 @@ class NoteLiveSet(u: Note) {
             reports.hasObservers() ||
             relays.hasObservers() ||
             zaps.hasObservers() ||
+            tips.hasObservers() ||
             hasEvent.hasObservers() ||
             hasReactions.hasObservers() ||
             replyCount.hasObservers() ||
@@ -1038,6 +1077,7 @@ class NoteLiveSet(u: Note) {
         innerReports.destroy()
         innerRelays.destroy()
         innerZaps.destroy()
+        innerTips.destroy()
         innerOts.destroy()
         innerModifications.destroy()
     }

@@ -584,6 +584,13 @@ fun RenderCommunitiesThumb(
                 accountViewModel = accountViewModel,
                 nav = nav,
             )
+            Spacer(modifier = StdHorzSpacer)
+            TipReaction(
+                baseNote = baseNote,
+                grayTint = MaterialTheme.colorScheme.onSurface,
+                accountViewModel = accountViewModel,
+                nav = nav,
+            )
         },
         onDescription = {
             card.description?.let {
@@ -805,6 +812,13 @@ fun RenderChannelThumb(
             )
             Spacer(modifier = StdHorzSpacer)
             ZapReaction(
+                baseNote = baseNote,
+                grayTint = MaterialTheme.colorScheme.onSurface,
+                accountViewModel = accountViewModel,
+                nav = nav,
+            )
+            Spacer(modifier = StdHorzSpacer)
+            TipReaction(
                 baseNote = baseNote,
                 grayTint = MaterialTheme.colorScheme.onSurface,
                 accountViewModel = accountViewModel,

@@ -124,6 +124,8 @@ open class Event(
 
     override fun hasZapSplitSetup() = tags.any { it.size > 1 && it[0] == "zap" }
 
+    override fun hasTipSplitSetup() = tags.any { it.size > 1 && it[0] == "monero" }
+
     override fun zapSplitSetup(): List<ZapSplitSetup> {
         return tags
             .filter { it.size > 1 && it[0] == "zap" }
@@ -142,6 +144,47 @@ open class Event(
                     null
                 }
             }
+    }
+
+    override fun tipSplitSetup(): List<TipSplitSetup> {
+        var tipSplitSetup =
+            tags
+                .filter { it.size > 1 && it[0] == "monero" }
+                .mapNotNull {
+                    val isAddress = it[1].length == 95
+                    var relay: String? = null
+                    var weight: Double? = null
+
+                    if (isAddress) {
+                        val weightString = it.getOrNull(2)
+                        if (weightString != null) {
+                            weight = weightString.toDoubleOrNull() ?: 0.0
+                        }
+                    } else {
+                        relay = it.getOrNull(2)
+                        val weightString = it.getOrNull(3)
+                        if (weightString != null) {
+                            weight = weightString.toDoubleOrNull() ?: 0.0
+                        }
+                    }
+
+                    if ((weight == null || weight > 0) && (isAddress || relay != null)) {
+                        TipSplitSetup(
+                            it[1],
+                            relay,
+                            weight,
+                            isAddress,
+                        )
+                    } else {
+                        null
+                    }
+                }
+
+        if (tipSplitSetup.any { it.weight != null }) {
+            tipSplitSetup = tipSplitSetup.filter { it.weight != null }
+        }
+
+        return tipSplitSetup
     }
 
     override fun taggedAddresses() =
@@ -547,4 +590,11 @@ data class ZapSplitSetup(
     val relay: String?,
     val weight: Double,
     val isLnAddress: Boolean,
+)
+
+data class TipSplitSetup(
+    val addressOrPubKeyHex: String,
+    val relay: String?,
+    val weight: Double?,
+    val isAddress: Boolean,
 )

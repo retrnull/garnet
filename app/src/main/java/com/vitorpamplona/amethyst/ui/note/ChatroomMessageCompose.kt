@@ -212,7 +212,7 @@ fun NormalChatNote(
                 remember {
                     mutableStateOf(
                         if (accountViewModel.settings.featureSet == FeatureSetType.SIMPLIFIED) {
-                            note.zaps.isNotEmpty() || note.zapPayments.isNotEmpty() || note.reactions.isNotEmpty()
+                            note.zaps.isNotEmpty() || note.zapPayments.isNotEmpty() || note.tips.isNotEmpty() || note.reactions.isNotEmpty()
                         } else {
                             true
                         },
@@ -391,6 +391,8 @@ private fun MessageBubbleLines(
                 LikeReaction(baseNote, MaterialTheme.colorScheme.placeholderText, accountViewModel, nav)
                 Spacer(modifier = StdHorzSpacer)
                 ZapReaction(baseNote, MaterialTheme.colorScheme.placeholderText, accountViewModel, nav = nav)
+                Spacer(modifier = DoubleHorzSpacer)
+                TipReaction(baseNote = baseNote, grayTint = MaterialTheme.colorScheme.placeholderText, accountViewModel, nav = nav)
                 Spacer(modifier = DoubleHorzSpacer)
                 ReplyReaction(
                     baseNote = baseNote,

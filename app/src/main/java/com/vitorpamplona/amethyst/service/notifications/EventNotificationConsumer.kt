@@ -29,6 +29,7 @@ import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.model.Account
 import com.vitorpamplona.amethyst.model.LocalCache
 import com.vitorpamplona.amethyst.service.notifications.NotificationUtils.sendDMNotification
+import com.vitorpamplona.amethyst.service.notifications.NotificationUtils.sendTipNotification
 import com.vitorpamplona.amethyst.service.notifications.NotificationUtils.sendZapNotification
 import com.vitorpamplona.amethyst.ui.note.showAmount
 import com.vitorpamplona.quartz.encoders.toHexKey
@@ -40,6 +41,7 @@ import com.vitorpamplona.quartz.events.LnZapEvent
 import com.vitorpamplona.quartz.events.LnZapRequestEvent
 import com.vitorpamplona.quartz.events.PrivateDmEvent
 import com.vitorpamplona.quartz.events.SealedGossipEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import com.vitorpamplona.quartz.utils.TimeUtils
 import kotlinx.collections.immutable.persistentSetOf
 import java.math.BigDecimal
@@ -80,6 +82,9 @@ class EventNotificationConsumer(private val applicationContext: Context) {
                             notify(innerEvent, account)
                         } else if (innerEvent is LnZapEvent) {
                             Log.d("EventNotificationConsumer", "New Zap to Notify")
+                            notify(innerEvent, account)
+                        } else if (innerEvent is TipEvent) {
+                            Log.d("EventNotificationConsumer", "New Tip to Notify")
                             notify(innerEvent, account)
                         } else if (innerEvent is ChatMessageEvent) {
                             Log.d("EventNotificationConsumer", "New ChatMessage to Notify")
@@ -252,6 +257,52 @@ class EventNotificationConsumer(private val applicationContext: Context) {
                     }
                 }
             }
+        }
+    }
+
+    private fun notify(
+        event: TipEvent,
+        acc: Account,
+    ) {
+        if (event.createdAt < TimeUtils.fifteenMinutesAgo()) return
+
+        val noteTipped = event.taggedEvents().firstOrNull()?.let { LocalCache.checkGetOrCreateNote(it) }
+
+        val proof = event.tipProof() ?: return
+
+        if (event.isTaggedUser(acc.userProfile().pubkeyHex)) {
+            val author = LocalCache.getOrCreateUser(event.pubKey)
+            val user = author.toBestDisplayName()
+            val userPicture = author.profilePicture()
+
+            val title = applicationContext.getString(R.string.app_notification_tips_channel_message)
+            var content =
+                applicationContext.getString(
+                    R.string.app_notification_tips_channel_message_from,
+                    user,
+                )
+            noteTipped?.let {
+                acc.decryptContent(noteTipped) {
+                    val tippedContent = it.split("\n").first()
+                    content +=
+                        " " +
+                        applicationContext.getString(
+                            R.string.app_notification_tips_channel_message_for,
+                            tippedContent,
+                        )
+                }
+            }
+
+            val noteUri = "nostr:Notifications"
+            notificationManager()
+                .sendTipNotification(
+                    event.id,
+                    content,
+                    title,
+                    userPicture,
+                    noteUri,
+                    applicationContext,
+                )
         }
     }
 

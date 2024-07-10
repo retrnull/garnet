@@ -67,6 +67,8 @@ import com.vitorpamplona.amethyst.ui.screen.loggedIn.HashtagScreen
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.HiddenUsersScreen
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.HomeScreen
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.LoadRedirectScreen
+import com.vitorpamplona.amethyst.ui.screen.loggedIn.MoneroScreen
+import com.vitorpamplona.amethyst.ui.screen.loggedIn.MoneroViewModel
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.NotificationScreen
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.ProfileScreen
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.SearchScreen
@@ -94,6 +96,7 @@ fun AppNavigation(
     navController: NavHostController,
     accountViewModel: AccountViewModel,
     sharedPreferencesViewModel: SharedPreferencesViewModel,
+    moneroViewModel: MoneroViewModel,
 ) {
     val scope = rememberCoroutineScope()
     val nav =
@@ -216,6 +219,7 @@ fun AppNavigation(
         composable(Route.BlockedUsers.route, content = { HiddenUsersScreen(accountViewModel, nav) })
         composable(Route.Bookmarks.route, content = { BookmarkListScreen(accountViewModel, nav) })
         composable(Route.Drafts.route, content = { DraftListScreen(accountViewModel, nav) })
+        composable(Route.Monero.route, content = { MoneroScreen(moneroViewModel, nav) })
 
         Route.Profile.let { route ->
             composable(

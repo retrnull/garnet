@@ -22,8 +22,10 @@ package com.vitorpamplona.quartz.crypto
 
 import android.util.Log
 import com.vitorpamplona.quartz.encoders.HexKey
+import com.vitorpamplona.quartz.encoders.toHexKey
 import com.vitorpamplona.quartz.events.Event
 import fr.acinq.secp256k1.Secp256k1
+import java.math.BigInteger
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
@@ -350,5 +352,19 @@ object CryptoUtils {
             e.printStackTrace()
             null
         }
+    }
+
+    fun privateKeyToSpendKey(privateKey: ByteArray): String {
+        if (!secp256k1.secKeyVerify(privateKey)) {
+            throw IllegalArgumentException("Invalid private key")
+        }
+
+        val keyHex = privateKey.toHexKey()
+        val key = BigInteger(keyHex, 16)
+        val reducedKey = key % BigInteger("7237005577332262213973186563042994240857116359379907606001950938285454250989")
+        val spendKeyHex = reducedKey.toString(16)
+        // 32 bytes = 64 chars
+        val padding = "0".repeat(64 - spendKeyHex.length)
+        return "$padding$spendKeyHex"
     }
 }

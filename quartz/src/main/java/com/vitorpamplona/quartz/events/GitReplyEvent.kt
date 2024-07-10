@@ -86,6 +86,7 @@ class GitReplyEvent(
             zapReceiver: List<ZapSplitSetup>? = null,
             markAsSensitive: Boolean = false,
             zapRaiserAmount: Long? = null,
+            tipReceiver: List<TipSplitSetup>? = null,
             replyingTo: String? = null,
             root: String? = null,
             directMentions: Set<HexKey> = emptySet(),
@@ -147,6 +148,9 @@ class GitReplyEvent(
                 tags.add(arrayOf("content-warning", ""))
             }
             zapRaiserAmount?.let { tags.add(arrayOf("zapraiser", "$it")) }
+            tipReceiver?.forEach {
+                tags.add(arrayOf("monero", it.addressOrPubKeyHex, it.relay ?: "", it.weight.toString()))
+            }
             geohash?.let { tags.addAll(geohashMipMap(it)) }
             nip94attachments?.let {
                 it.forEach {

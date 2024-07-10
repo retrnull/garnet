@@ -59,6 +59,14 @@ class ParticipantListBuilder {
             }
         }
 
+        baseNote.tips.forEach { tip ->
+            tip.author?.let { author ->
+                if (author !in set && (followingSet == null || author.pubkeyHex in followingSet)) {
+                    set.add(author)
+                }
+            }
+        }
+
         baseNote.reactions.forEach { reactionSet ->
             reactionSet.value.forEach { reaction ->
                 reaction.author?.let { author ->

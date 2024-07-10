@@ -124,6 +124,7 @@ class PrivateDmEvent(
             advertiseNip18: Boolean = true,
             markAsSensitive: Boolean,
             zapRaiserAmount: Long?,
+            tipReceiver: List<TipSplitSetup>? = null,
             geohash: String? = null,
             nip94attachments: List<FileHeaderEvent>? = null,
             isDraft: Boolean,
@@ -155,6 +156,9 @@ class PrivateDmEvent(
                 tags.add(arrayOf("content-warning", ""))
             }
             zapRaiserAmount?.let { tags.add(arrayOf("zapraiser", "$it")) }
+            tipReceiver?.forEach {
+                tags.add(arrayOf("monero", it.addressOrPubKeyHex, it.relay ?: "", it.weight.toString()))
+            }
             geohash?.let { tags.addAll(geohashMipMap(it)) }
             /* Privacy issue: DO NOT ADD THESE TO THE TAGS.
             nip94attachments?.let {

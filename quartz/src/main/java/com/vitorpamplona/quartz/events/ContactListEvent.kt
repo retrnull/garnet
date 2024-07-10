@@ -413,6 +413,9 @@ class UserMetadata {
     var lud06: String? = null
     var lud16: String? = null
 
+    @JsonProperty("cryptocurrency_addresses")
+    var cryptoAddresses: Map<String, String>? = null
+
     var twitter: String? = null
 
     @Transient
@@ -430,6 +433,10 @@ class UserMetadata {
 
     fun lnAddress(): String? {
         return lud16 ?: lud06
+    }
+
+    fun moneroAddress(): String? {
+        return cryptoAddresses?.get("monero")
     }
 
     fun bestName(): String? {

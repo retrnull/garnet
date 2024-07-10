@@ -107,6 +107,8 @@ interface EventInterface {
 
     fun zapSplitSetup(): List<ZapSplitSetup>
 
+    fun tipSplitSetup(): List<TipSplitSetup>
+
     fun isSensitive(): Boolean
 
     fun subject(): String?
@@ -144,4 +146,6 @@ interface EventInterface {
     fun isExpirationBefore(time: Long): Boolean
 
     fun hasZapSplitSetup(): Boolean
+
+    fun hasTipSplitSetup(): Boolean
 }

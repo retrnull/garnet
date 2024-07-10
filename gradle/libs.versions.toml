@@ -39,6 +39,7 @@ translate = "17.0.2"
 unifiedpush = "2.2.0"
 urlDetector = "0.1.23"
 vico-charts = "1.14.0"
+workRuntimeKtx = "2.9.0"
 zelory = "3.0.1"
 zoomable = "1.6.1"
 zxing = "3.5.3"
@@ -81,6 +82,7 @@ androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
 audiowaveform = { group = "com.github.lincollincol", name = "compose-audiowaveform", version.ref = "audiowaveform" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }

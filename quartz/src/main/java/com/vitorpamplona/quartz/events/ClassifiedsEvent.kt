@@ -109,6 +109,7 @@ class ClassifiedsEvent(
             zapReceiver: List<ZapSplitSetup>? = null,
             markAsSensitive: Boolean,
             zapRaiserAmount: Long?,
+            tipReceiver: List<TipSplitSetup>? = null,
             geohash: String? = null,
             nip94attachments: List<Event>? = null,
             signer: NostrSigner,
@@ -185,6 +186,9 @@ class ClassifiedsEvent(
                 tags.add(arrayOf("content-warning", ""))
             }
             zapRaiserAmount?.let { tags.add(arrayOf("zapraiser", "$it")) }
+            tipReceiver?.forEach {
+                tags.add(arrayOf("monero", it.addressOrPubKeyHex, it.relay ?: "", it.weight.toString()))
+            }
             geohash?.let { tags.addAll(geohashMipMap(it)) }
             nip94attachments?.let {
                 it.forEach {

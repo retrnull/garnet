@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -66,6 +67,7 @@ import com.vitorpamplona.amethyst.LocalPreferences
 import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.model.LocalCache
 import com.vitorpamplona.amethyst.model.User
+import com.vitorpamplona.amethyst.ui.actions.LoadingAnimation
 import com.vitorpamplona.amethyst.ui.components.CreateTextWithEmoji
 import com.vitorpamplona.amethyst.ui.components.RobohashFallbackAsyncImage
 import com.vitorpamplona.amethyst.ui.note.ArrowBackIcon
@@ -85,10 +87,12 @@ import kotlinx.coroutines.launch
 fun AccountSwitchBottomSheet(
     accountViewModel: AccountViewModel,
     accountStateViewModel: AccountStateViewModel,
+    onSwitching: () -> Unit,
 ) {
     val accounts = LocalPreferences.allSavedAccounts()
 
     var popupExpanded by remember { mutableStateOf(false) }
+    var switchingToAccount by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
 
     Column(modifier = Modifier.verticalScroll(scrollState)) {
@@ -102,7 +106,19 @@ fun AccountSwitchBottomSheet(
         ) {
             Text(stringResource(R.string.account_switch_select_account), fontWeight = FontWeight.Bold)
         }
-        accounts.forEach { acc -> DisplayAccount(acc, accountViewModel, accountStateViewModel) }
+        accounts.forEach { acc ->
+            DisplayAccount(
+                acc,
+                accountViewModel,
+                accountStateViewModel,
+                enabled = switchingToAccount.isEmpty() && accountViewModel.userProfile().pubkeyNpub() != acc.npub,
+                inProgress = switchingToAccount == acc.npub,
+                onSwitching = {
+                    onSwitching()
+                    switchingToAccount = acc.npub
+                },
+            )
+        }
         Row(
             modifier =
                 Modifier
@@ -148,6 +164,9 @@ fun DisplayAccount(
     acc: AccountInfo,
     accountViewModel: AccountViewModel,
     accountStateViewModel: AccountStateViewModel,
+    enabled: Boolean = true,
+    inProgress: Boolean = false,
+    onSwitching: () -> Unit,
 ) {
     var baseUser by remember {
         mutableStateOf<User?>(
@@ -173,7 +192,12 @@ fun DisplayAccount(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .clickable { accountStateViewModel.switchUser(acc) }
+                    .clickable {
+                        if (enabled) {
+                            accountStateViewModel.switchUser(acc)
+                            onSwitching()
+                        }
+                    }
                     .padding(16.dp, 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -204,7 +228,13 @@ fun DisplayAccount(
                 }
             }
 
-            LogoutButton(acc, accountStateViewModel)
+            if (!inProgress) {
+                LogoutButton(acc, accountStateViewModel)
+            } else {
+                Box(modifier = Modifier.offset((-10).dp)) {
+                    LoadingAnimation(indicatorSize = 32.dp)
+                }
+            }
         }
     }
 }

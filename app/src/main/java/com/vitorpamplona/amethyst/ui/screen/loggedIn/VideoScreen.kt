@@ -76,6 +76,7 @@ import com.vitorpamplona.amethyst.ui.note.NoteAuthorPicture
 import com.vitorpamplona.amethyst.ui.note.NoteUsernameDisplay
 import com.vitorpamplona.amethyst.ui.note.RenderRelay
 import com.vitorpamplona.amethyst.ui.note.ReplyReaction
+import com.vitorpamplona.amethyst.ui.note.TipReaction
 import com.vitorpamplona.amethyst.ui.note.ViewCountReaction
 import com.vitorpamplona.amethyst.ui.note.WatchForReports
 import com.vitorpamplona.amethyst.ui.note.ZapReaction
@@ -505,6 +506,15 @@ fun ReactionsColumn(
             iconSize = Size40dp,
             iconSizeModifier = Size40Modifier,
             animationSize = Size35dp,
+            nav = nav,
+        )
+        TipReaction(
+            baseNote = baseNote,
+            grayTint = MaterialTheme.colorScheme.onBackground,
+            accountViewModel = accountViewModel,
+            iconSize = 40.dp,
+            iconSizeModifier = Modifier.size(40.dp),
+            animationSize = 35.dp,
             nav = nav,
         )
         ViewCountReaction(

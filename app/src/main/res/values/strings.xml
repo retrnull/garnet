@@ -1,6 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name_release" translatable="false">Amethyst</string>
-    <string name="app_name_debug" translatable="false">Amethyst Debug</string>
+    <string name="app_name_release" translatable="false">Garnet</string>
+    <string name="app_name_debug" translatable="false">Garnet Debug</string>
     <string name="point_to_the_qr_code">Point to the QR Code</string>
     <string name="show_qr">Show QR</string>
     <string name="profile_image">Profile Picture</string>
@@ -40,7 +40,9 @@
     <string name="login_with_a_private_key_to_be_able_to_boost_posts">You are using a public key and public keys are read-only. Login with a Private key to be able to boost posts</string>
     <string name="login_with_a_private_key_to_like_posts">You are using a public key and public keys are read-only. Login with a Private key to like posts</string>
     <string name="no_zap_amount_setup_long_press_to_change">No Zap Amount Setup. Long Press to change</string>
+    <string name="no_tip_amount_setup_long_press_to_change">No Tip Amount Setup. Long Press to change</string>
     <string name="login_with_a_private_key_to_be_able_to_send_zaps">You are using a public key and public keys are read-only. Login with a Private key to be able to send zaps</string>
+    <string name="login_with_a_private_key_to_be_able_to_send_public_tip">You are using a public key and public keys are read-only. Send an anonymous or private tip or login with a Private key to be able to send public tips</string>
     <string name="login_with_a_private_key_to_be_able_to_follow">You are using a public key and public keys are read-only. Login with a Private key to be able to follow</string>
     <string name="login_with_a_private_key_to_be_able_to_unfollow">You are using a public key and public keys are read-only. Login with a Private key to be able to unfollow</string>
     <string name="login_with_a_private_key_to_be_able_to_hide_word">You are using a public key and public keys are read-only. Login with a Private key to be able to hide a word or sentence</string>
@@ -48,6 +50,7 @@
 
 
     <string name="zaps">Zaps</string>
+    <string name="tips">Tips</string>
     <string name="view_count">View count</string>
     <string name="boost">Boost</string>
     <string name="boosted">boosted</string>
@@ -58,6 +61,7 @@
     <string name="fork">Fork</string>
     <string name="propose_an_edit">Propose an Edit</string>
     <string name="new_amount_in_sats">New Amount in Sats</string>
+    <string name="new_amount_in_xmr">New Amount in XMR</string>
     <string name="add">Add</string>
     <string name="replying_to">"replying to "</string>
     <string name="and">" and "</string>
@@ -73,10 +77,13 @@
     <string name="show_more">Show More</string>
     <string name="lightning_invoice">Lightning Invoice</string>
     <string name="pay">Pay</string>
+    <string name="monero_tips">Monero Tips</string>
     <string name="lightning_tips">Lightning Tips</string>
     <string name="note_to_receiver">Note to Receiver</string>
     <string name="thank_you_so_much">Thank you so much!</string>
+    <string name="amount_in_xmr">Amount in XMR</string>
     <string name="amount_in_sats">Amount in Sats</string>
+    <string name="send_monero">Send Monero</string>
     <string name="send_sats">Send Sats</string>
     <string name="error_parsing_preview_for">"Error parsing preview for %1$s : %2$s"</string>
     <string name="preview_card_image_for">"Preview Card Image for %1$s"</string>
@@ -119,6 +126,7 @@
     <string name="upload_image">Upload Image</string>
     <string name="uploading">Uploading…</string>
     <string name="user_does_not_have_a_lightning_address_setup_to_receive_sats">User does not have a lightning address set up to receive sats</string>
+    <string name="user_does_not_have_a_monero_address_setup_to_receive_tips">User does not have a Monero address set up to receive tips</string>
     <string name="reply_here">"reply here.. "</string>
     <string name="copies_the_note_id_to_the_clipboard_for_sharing">Copies the Note ID to the clipboard for sharing in Nostr</string>
     <string name="copy_channel_id_note_to_the_clipboard">Copy Channel ID (Note) to the Clipboard</string>
@@ -209,6 +217,8 @@
     <string name="report_hateful_speech">Report Hateful speech</string>
     <string name="report_nudity_porn">Report Nudity / Porn</string>
     <string name="others">others</string>
+    <string name="backup_seed">Backup seed</string>
+    <string name="set_custom_restore_height">Set custom restore height</string>
     <string name="mark_all_known_as_read">Mark all Known as read</string>
     <string name="mark_all_new_as_read">Mark all New as read</string>
     <string name="mark_all_as_read">Mark all as read</string>
@@ -294,6 +304,7 @@
 
     <string name="bookmarks">Bookmarks</string>
     <string name="drafts">Drafts</string>
+    <string name="monero">Monero</string>
     <string name="private_bookmarks">Private Bookmarks</string>
     <string name="public_bookmarks">Public Bookmarks</string>
     <string name="add_to_private_bookmarks">Add to Private Bookmarks</string>
@@ -352,6 +363,22 @@
     <string name="content_description">Description of the contents</string>
     <string name="content_description_example">A blue boat in a white sandy beach at sunset</string>
 
+    <string name="custom_tips_add_a_message">Add a public message</string>
+
+    <string name="tip_type">Tip Type</string>
+    <string name="tip_type_explainer">Tip Type for all options</string>
+
+    <string name="tip_type_private">Private</string>
+    <string name="tip_type_private_explainer">No traces</string>
+
+    <string name="tip_type_anonymous">Anonymous</string>
+    <string name="tip_type_anonymous_explainer">Everybody can see the transaction and message but not the sender</string>
+
+    <string name="tip_type_public">Public</string>
+    <string name="tip_type_public_explainer">Everybody can see the transaction, the message and the sender</string>
+
+    <string name="transaction_priority_explainer">Default transaction priority</string>
+
     <string name="zap_type">Zap Type</string>
     <string name="zap_type_explainer">Zap Type for all options</string>
 
@@ -408,6 +435,13 @@
     <string name="app_notification_dms_channel_id" translatable="false">PrivateMessagesID</string>
     <string name="app_notification_dms_channel_name">Private Messages</string>
     <string name="app_notification_dms_channel_description">Notifies you when a private message arrives</string>
+
+    <string name="app_notification_tips_channel_id" translatable="false">TipsID</string>
+    <string name="app_notification_tips_channel_name">Tips Received</string>
+    <string name="app_notification_tips_channel_description">Notifies you when somebody tips you</string>
+    <string name="app_notification_tips_channel_message">Monero Tip</string>
+    <string name="app_notification_tips_channel_message_from">From %1$s</string>
+    <string name="app_notification_tips_channel_message_for">for %1$s</string>
 
     <string name="app_notification_zaps_channel_id" translatable="false">ZapsID</string>
     <string name="app_notification_zaps_channel_name">Zaps Received</string>
@@ -588,8 +622,18 @@
     <string name="poll_zap_value_min_max_explainer">Votes are weighted by the zap amount. You can set a minimum amount to avoid spammers and a maximum amount to avoid a large zappers taking over the poll. Use the same amount in both fields to make sure every vote is valued the same amount. Leave it empty to accept any amount.</string>
 
     <string name="error_dialog_zap_error">Unable to send zap</string>
+    <string name="error_dialog_tip_error">Unable to tip</string>
+    <string name="error_dialog_transfer_error">Unable to transfer</string>
+    <string name="error_dialog_tip_proof_error">Unable to generate tip proof</string>
     <string name="error_dialog_talk_to_user">Message the User</string>
     <string name="error_dialog_button_ok">OK</string>
+
+    <string name="daemon_edit_dialog_address_error">Invalid address</string>
+    <string name="daemon_edit_dialog_port_error">Invalid port</string>
+
+    <string name="monero_fund_wallet">Fund the Wallet</string>
+    <string name="monero_fund_wallet_address_description">Send Monero to the address below in order to fund the wallet</string>
+    <string name="monero_fund_wallet_qrcode_description">Or scan the following QR code</string>
 
     <string name="relay_information_document_error_assemble_url">Failed to reach %1$s: %2$s</string>
     <string name="relay_information_document_error_reach_server">Failed to reach %1$s: %2$s</string>
@@ -603,6 +647,9 @@
     <string name="active_for_global">Global</string>
     <string name="active_for_search">Search</string>
 
+    <string name="tip_split_title">Split and Forward Tips</string>
+    <string name="tip_split_explainer">Supporting clients will split and forward tips to the users added here instead of yours</string>
+
     <string name="zap_split_title">Split and Forward Zaps</string>
     <string name="zap_split_explainer">Supporting clients will split and forward zaps to the users added here instead of yours</string>
     <string name="zap_split_search_and_add_user">Search and Add User</string>
@@ -613,6 +660,9 @@
     <string name="zap_split_weight_placeholder">25</string>
     <string name="splitting_zaps_with">Splitting zaps with</string>
     <string name="forwarding_zaps_to">Forwarding zaps to</string>
+
+    <string name="missing_monero_setup">Missing Monero setup</string>
+    <string name="user_x_does_not_have_a_monero_address_setup_to_receive_tips">User %1$s does not have a Monero address set up to receive tips</string>
 
     <string name="lightning_wallets_not_found2">Lightning wallets not found</string>
     <string name="paid">Paid</string>
@@ -769,6 +819,7 @@
     <string name="boost_or_quote_description">Boost Or Quote</string>
     <string name="like_description">Like</string>
     <string name="zap_description">Zap</string>
+    <string name="tip_description">Tip</string>
 
     <string name="profile_image_of_user">Profile Picture of %1$s</string>
     <string name="relay_info">Relay %1$s</string>
@@ -837,7 +888,61 @@
     <string name="it_s_not_possible_to_quote_to_a_draft_note">It\'s not possible to quote a draft note</string>
     <string name="it_s_not_possible_to_react_to_a_draft_note">It\'s not possible to react a draft note</string>
     <string name="it_s_not_possible_to_zap_to_a_draft_note">It\'s not possible to zap a draft note</string>
+    <string name="it_s_not_possible_to_tip_to_a_draft_note">It\'s not possible to tip a draft note</string>
     <string name="draft_note">Draft Note</string>
 
     <string name="load_from_text">From Msg</string>
+
+    <string name="x_blocks_left">%1$s blocks left</string>
+    <string name="x_blocks">%1$s blocks</string>
+
+    <string name="wallet_status_opening">Opening wallet…</string>
+    <string name="wallet_status_connecting">Connecting…</string>
+    <string name="wallet_status_disconnecting">Disconnecting…</string>
+    <string name="wallet_status_syncing">Syncing</string>
+    <string name="wallet_status_synced">Synced</string>
+    <string name="wallet_status_error">Error</string>
+    <string name="wallet_status_disconnected">Disconnected</string>
+
+    <string name="daemon_info_disconnected_indicator_text">(disconnected)</string>
+
+    <string name="daemon">Daemon</string>
+    <string name="edit_daemon">Edit daemon</string>
+    <string name="daemon_address">Address</string>
+    <string name="daemon_port">Port</string>
+    <string name="daemon_username">Username</string>
+    <string name="daemon_password">Password</string>
+
+    <string name="textfield_optional">(optional)</string>
+
+    <string name="transaction_priority_unimportant">Unimportant</string>
+    <string name="transaction_priority_normal">Normal</string>
+    <string name="transaction_priority_elevated">Elevated</string>
+    <string name="transaction_priority_priority">Priority</string>
+    <string name="transaction_priority">Transaction Priority</string>
+    <string name="priority">Priority</string>
+
+    <string name="no_connection_to_monero_daemon">No connection to Monero daemon</string>
+
+    <string name="monero_address_copied_to_clipboard">Monero address copied to clipboard</string>
+
+    <string name="send">Send</string>
+    <string name="receive">Receive</string>
+    <string name="locked">Locked</string>
+
+    <string name="address">Address</string>
+    <string name="amount">Amount</string>
+    <string name="invalid_height">Invalid height</string>
+    <string name="invalid_monero_address">Invalid address</string>
+    <string name="invalid_monero_amount">Invalid amount</string>
+
+    <string name="warning">Warning</string>
+    <string name="monero_ephemeral_wallet_seed_backup_warning">You are logged in with an external signer or a public key. This makes it impossible to tie your Monero spend key to your Nostr private key.\n\nPlease back up your seed to avoid money loss.</string>
+    <string name="monero_seed_copied_to_clipboard">Seed copied to clipboard</string>
+    <string name="copy_my_seed">Copy my seed</string>
+
+    <string name="backup_seed_dialog_description_1">Your seed is a unique sequence of words tied to your Monero private key that gives you access to your wallet.</string>
+    <string name="backup_seed_dialog_description_2">By backing it up, you avoid losing your money if you lose your Nostr private key.</string>
+
+    <string name="restore_height">Restore height</string>
 </resources>

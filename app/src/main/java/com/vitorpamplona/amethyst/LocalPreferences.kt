@@ -26,8 +26,10 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.compose.runtime.Immutable
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.google.common.net.HostAndPort
 import com.vitorpamplona.amethyst.model.Account
 import com.vitorpamplona.amethyst.model.DefaultReactions
+import com.vitorpamplona.amethyst.model.DefaultTipAmounts
 import com.vitorpamplona.amethyst.model.DefaultZapAmounts
 import com.vitorpamplona.amethyst.model.GLOBAL_FOLLOWS
 import com.vitorpamplona.amethyst.model.KIND3_FOLLOWS
@@ -36,6 +38,8 @@ import com.vitorpamplona.amethyst.model.Settings
 import com.vitorpamplona.amethyst.service.HttpClientManager
 import com.vitorpamplona.amethyst.service.Nip96MediaServers
 import com.vitorpamplona.amethyst.service.checkNotInMainThread
+import com.vitorpamplona.amethyst.service.relays.Constants
+import com.vitorpamplona.amethyst.ui.screen.loggedIn.TransactionPriority
 import com.vitorpamplona.quartz.crypto.KeyPair
 import com.vitorpamplona.quartz.encoders.HexKey
 import com.vitorpamplona.quartz.encoders.Nip47WalletConnect
@@ -45,6 +49,7 @@ import com.vitorpamplona.quartz.encoders.toNpub
 import com.vitorpamplona.quartz.events.ContactListEvent
 import com.vitorpamplona.quartz.events.Event
 import com.vitorpamplona.quartz.events.LnZapEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import com.vitorpamplona.quartz.signers.ExternalSignerLauncher
 import com.vitorpamplona.quartz.signers.NostrSignerExternal
 import com.vitorpamplona.quartz.signers.NostrSignerInternal
@@ -75,13 +80,24 @@ private object PrefKeys {
     const val SAVED_ACCOUNTS = "all_saved_accounts"
     const val NOSTR_PRIVKEY = "nostr_privkey"
     const val NOSTR_PUBKEY = "nostr_pubkey"
+    const val MONERO_SPENDKEY = "monero_spendkey"
+    const val MONERO_SEED = "monero_seed"
+    const val MONERO_PASSWORD = "monero_password"
+    const val MONERO_DAEMON = "monero_daemon_address"
+    const val MONERO_DAEMON_USERNAME = "monero_daemon_username"
+    const val MONERO_DAEMON_PASSWORD = "monero_daemon_password"
+    const val IS_MONERO_SEED_BACKED_UP = "monero_seed_is_backed_up"
     const val RELAYS = "relays"
     const val DONT_TRANSLATE_FROM = "dontTranslateFrom"
     const val LANGUAGE_PREFS = "languagePreferences"
     const val TRANSLATE_TO = "translateTo"
     const val ZAP_AMOUNTS = "zapAmounts"
+    const val MONERO_TIP_AMOUNTS = "moneroTipAmounts"
     const val REACTION_CHOICES = "reactionChoices"
     const val DEFAULT_ZAPTYPE = "defaultZapType"
+
+    const val DEFAULT_MONERO_TIPTYPE = "defaultMoneroTipType"
+    const val DEFAULT_MONERO_TRANSACTION_PRIORITY = "defaultMoneroTransactionPriority"
     const val DEFAULT_FILE_SERVER = "defaultFileServer"
     const val DEFAULT_HOME_FOLLOW_LIST = "defaultHomeFollowList"
     const val DEFAULT_STORIES_FOLLOW_LIST = "defaultStoriesFollowList"
@@ -277,11 +293,21 @@ object LocalPreferences {
                     putBoolean(PrefKeys.LOGIN_WITH_EXTERNAL_SIGNER, account.signer is NostrSignerExternal)
                     if (account.signer is NostrSignerExternal) {
                         remove(PrefKeys.NOSTR_PRIVKEY)
+                        remove(PrefKeys.MONERO_SPENDKEY)
                         putString(PrefKeys.SIGNER_PACKAGE_NAME, account.signer.launcher.signerPackageName)
+                        putString(PrefKeys.MONERO_SEED, account.moneroSeed)
                     } else {
-                        account.keyPair.privKey?.let { putString(PrefKeys.NOSTR_PRIVKEY, it.toHexKey()) }
+                        account.keyPair.privKey?.let {
+                            putString(PrefKeys.NOSTR_PRIVKEY, it.toHexKey())
+                            putString(PrefKeys.MONERO_SPENDKEY, account.moneroSpendKey)
+                        }
                     }
                     account.keyPair.pubKey.let { putString(PrefKeys.NOSTR_PUBKEY, it.toHexKey()) }
+                    putString(PrefKeys.MONERO_PASSWORD, account.moneroPassword)
+                    putString(PrefKeys.MONERO_DAEMON, account.moneroDaemonAddress.toString())
+                    putString(PrefKeys.MONERO_DAEMON_USERNAME, account.moneroDaemonUsername)
+                    putString(PrefKeys.MONERO_DAEMON_PASSWORD, account.moneroDaemonPassword)
+                    putBoolean(PrefKeys.IS_MONERO_SEED_BACKED_UP, account.isMoneroSeedBackedUp)
                     putString(PrefKeys.RELAYS, Event.mapper.writeValueAsString(account.localRelays))
                     putStringSet(PrefKeys.DONT_TRANSLATE_FROM, account.dontTranslateFrom)
                     putString(
@@ -290,11 +316,14 @@ object LocalPreferences {
                     )
                     putString(PrefKeys.TRANSLATE_TO, account.translateTo)
                     putString(PrefKeys.ZAP_AMOUNTS, Event.mapper.writeValueAsString(account.zapAmountChoices))
+                    putString(PrefKeys.MONERO_TIP_AMOUNTS, Event.mapper.writeValueAsString(account.tipAmountChoices))
                     putString(
                         PrefKeys.REACTION_CHOICES,
                         Event.mapper.writeValueAsString(account.reactionChoices),
                     )
                     putString(PrefKeys.DEFAULT_ZAPTYPE, account.defaultZapType.name)
+                    putString(PrefKeys.DEFAULT_MONERO_TIPTYPE, account.defaultTipType.name)
+                    putString(PrefKeys.DEFAULT_MONERO_TRANSACTION_PRIORITY, account.defaultMoneroTransactionPriority.name)
                     putString(
                         PrefKeys.DEFAULT_FILE_SERVER,
                         Event.mapper.writeValueAsString(account.defaultFileServer),
@@ -402,6 +431,15 @@ object LocalPreferences {
                 val loginWithExternalSigner = getBoolean(PrefKeys.LOGIN_WITH_EXTERNAL_SIGNER, false)
                 val privKey = if (loginWithExternalSigner) null else getString(PrefKeys.NOSTR_PRIVKEY, null)
 
+                val moneroSpendKey = if (loginWithExternalSigner) null else getString(PrefKeys.MONERO_SPENDKEY, "")
+                val moneroSeed = if (!loginWithExternalSigner) null else getString(PrefKeys.MONERO_SEED, "")
+                val moneroPassword = getString(PrefKeys.MONERO_PASSWORD, "")
+
+                val moneroDaemonAddress = HostAndPort.fromString(getString(PrefKeys.MONERO_DAEMON, Constants.defaultMoneroDaemon.toString())!!)
+                val moneroDaemonUsername = getString(PrefKeys.MONERO_DAEMON_USERNAME, "") ?: ""
+                val moneroDaemonPassword = getString(PrefKeys.MONERO_DAEMON_PASSWORD, "") ?: ""
+                val isMoneroSeedBackedUp = getBoolean(PrefKeys.IS_MONERO_SEED_BACKED_UP, false)
+
                 val localRelays =
                     getString(PrefKeys.RELAYS, "[]")?.let {
                         println("LocalRelays: $it")
@@ -426,6 +464,12 @@ object LocalPreferences {
                         ?.ifEmpty { DefaultZapAmounts }
                         ?: DefaultZapAmounts
 
+                val tipAmountChoices =
+                    getString(PrefKeys.MONERO_TIP_AMOUNTS, "[]")
+                        ?.let { Event.mapper.readValue<List<String>?>(it) }
+                        ?.ifEmpty { DefaultTipAmounts }
+                        ?: DefaultTipAmounts
+
                 val reactionChoices =
                     getString(PrefKeys.REACTION_CHOICES, "[]")
                         ?.let { Event.mapper.readValue<List<String>?>(it) }
@@ -437,6 +481,18 @@ object LocalPreferences {
                         LnZapEvent.ZapType.values().firstOrNull { it.name == serverName }
                     }
                         ?: LnZapEvent.ZapType.PUBLIC
+
+                val defaultTipType =
+                    getString(PrefKeys.DEFAULT_MONERO_TIPTYPE, "")?.let { tipType ->
+                        TipEvent.TipType.entries.firstOrNull { it.name == tipType }
+                    }
+                        ?: TipEvent.TipType.PRIVATE
+
+                val defaultMoneroTransactionPriority =
+                    getString(PrefKeys.DEFAULT_MONERO_TRANSACTION_PRIORITY, "")?.let { priority ->
+                        TransactionPriority.entries.firstOrNull { it.name == priority }
+                    }
+                        ?: TransactionPriority.UNIMPORTANT
 
                 val defaultFileServer =
                     try {
@@ -575,14 +631,24 @@ object LocalPreferences {
                 val account =
                     Account(
                         keyPair = keyPair,
+                        moneroSpendKey = moneroSpendKey,
+                        moneroSeed = moneroSeed,
+                        moneroPassword = moneroPassword,
+                        moneroDaemonAddress = moneroDaemonAddress,
+                        moneroDaemonUsername = moneroDaemonUsername,
+                        moneroDaemonPassword = moneroDaemonPassword,
+                        isMoneroSeedBackedUp = isMoneroSeedBackedUp,
                         signer = signer,
                         localRelays = localRelays,
                         dontTranslateFrom = dontTranslateFrom,
                         languagePreferences = languagePreferences,
                         translateTo = translateTo,
                         zapAmountChoices = zapAmountChoices,
+                        tipAmountChoices = tipAmountChoices,
                         reactionChoices = reactionChoices,
                         defaultZapType = defaultZapType,
+                        defaultTipType = defaultTipType,
+                        defaultMoneroTransactionPriority = defaultMoneroTransactionPriority,
                         defaultFileServer = defaultFileServer,
                         defaultHomeFollowList = MutableStateFlow(defaultHomeFollowList),
                         defaultStoriesFollowList = MutableStateFlow(defaultStoriesFollowList),

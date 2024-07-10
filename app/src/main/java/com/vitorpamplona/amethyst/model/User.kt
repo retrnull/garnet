@@ -41,6 +41,7 @@ import com.vitorpamplona.quartz.events.ContactListEvent
 import com.vitorpamplona.quartz.events.LnZapEvent
 import com.vitorpamplona.quartz.events.MetadataEvent
 import com.vitorpamplona.quartz.events.ReportEvent
+import com.vitorpamplona.quartz.events.TipEvent
 import com.vitorpamplona.quartz.events.UserMetadata
 import com.vitorpamplona.quartz.events.toImmutableListOfLists
 import kotlinx.collections.immutable.persistentSetOf
@@ -62,6 +63,9 @@ class User(val pubkeyHex: String) {
     var latestEOSEs: Map<String, EOSETime> = emptyMap()
 
     var zaps = mapOf<Note, Note?>()
+        private set
+
+    var tips: MutableList<Note> = mutableListOf()
         private set
 
     var relaysBeingUsed = mapOf<String, RelayInfo>()
@@ -196,6 +200,26 @@ class User(val pubkeyHex: String) {
         }
 
         return amount
+    }
+
+    fun addTip(note: Note) {
+        if (note !in tips) {
+            tips += note
+            liveSet?.innerTips?.invalidateData()
+        }
+    }
+
+    fun removeTip(tipNote: Note) {
+        if (tipNote in tips) {
+            tips -= tipNote
+            liveSet?.innerTips?.invalidateData()
+        }
+    }
+
+    fun tippedAmount(): ULong {
+        return tips.sumOf {
+            (it.event as? TipEvent)?.valueByUser?.get(pubkeyHex) ?: 0UL
+        }
     }
 
     fun reportsBy(user: User): Set<Note> {
@@ -500,6 +524,7 @@ class UserLiveSet(u: User) {
     val innerRelays = UserBundledRefresherLiveData(u)
     val innerRelayInfo = UserBundledRefresherLiveData(u)
     val innerZaps = UserBundledRefresherLiveData(u)
+    val innerTips = UserBundledRefresherLiveData(u)
     val innerBookmarks = UserBundledRefresherLiveData(u)
     val innerStatuses = UserBundledRefresherLiveData(u)
 
@@ -512,6 +537,7 @@ class UserLiveSet(u: User) {
     val relays = innerRelays.map { it }
     val relayInfo = innerRelayInfo.map { it }
     val zaps = innerZaps.map { it }
+    val tips = innerTips.map { it }
     val bookmarks = innerBookmarks.map { it }
     val statuses = innerStatuses.map { it }
 
@@ -530,6 +556,7 @@ class UserLiveSet(u: User) {
             relays.hasObservers() ||
             relayInfo.hasObservers() ||
             zaps.hasObservers() ||
+            tips.hasObservers() ||
             bookmarks.hasObservers() ||
             statuses.hasObservers() ||
             profilePictureChanges.hasObservers() ||
@@ -546,6 +573,7 @@ class UserLiveSet(u: User) {
         innerRelays.destroy()
         innerRelayInfo.destroy()
         innerZaps.destroy()
+        innerTips.destroy()
         innerBookmarks.destroy()
         innerStatuses.destroy()
     }

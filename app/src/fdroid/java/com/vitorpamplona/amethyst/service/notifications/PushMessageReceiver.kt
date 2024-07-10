@@ -29,6 +29,7 @@ import androidx.core.content.ContextCompat
 import com.vitorpamplona.amethyst.Amethyst
 import com.vitorpamplona.amethyst.LocalPreferences
 import com.vitorpamplona.amethyst.service.notifications.NotificationUtils.getOrCreateDMChannel
+import com.vitorpamplona.amethyst.service.notifications.NotificationUtils.getOrCreateTipChannel
 import com.vitorpamplona.amethyst.service.notifications.NotificationUtils.getOrCreateZapChannel
 import com.vitorpamplona.quartz.events.Event
 import com.vitorpamplona.quartz.events.GiftWrapEvent
@@ -92,6 +93,7 @@ class PushMessageReceiver : MessagingReceiver() {
         scope.launch(Dispatchers.IO) {
             RegisterAccounts(LocalPreferences.allSavedAccounts()).go(sanitizedEndpoint)
             notificationManager().getOrCreateZapChannel(appContext)
+            notificationManager().getOrCreateTipChannel(appContext)
             notificationManager().getOrCreateDMChannel(appContext)
         }
     }

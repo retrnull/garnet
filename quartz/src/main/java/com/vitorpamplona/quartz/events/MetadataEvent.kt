@@ -186,6 +186,7 @@ class MetadataEvent(
             nip05: String?,
             lnAddress: String?,
             lnURL: String?,
+            moneroAddress: String?,
             twitter: String?,
             mastodon: String?,
             github: String?,
@@ -213,6 +214,20 @@ class MetadataEvent(
             nip05?.let { addIfNotBlank(currentJson, "nip05", it.trim()) }
             lnAddress?.let { addIfNotBlank(currentJson, "lud16", it.trim()) }
             lnURL?.let { addIfNotBlank(currentJson, "lud06", it.trim()) }
+            moneroAddress?.let {
+                val cryptos =
+                    if (currentJson.has("cryptocurrency_addresses")) {
+                        currentJson.get("cryptocurrency_addresses")
+                    } else {
+                        currentJson.putObject("cryptocurrency_addresses")
+                    } as ObjectNode
+
+                if (it.isBlank()) {
+                    cryptos.remove("monero")
+                } else {
+                    cryptos.put("monero", it)
+                }
+            }
 
             var claims = latest?.identityClaims() ?: emptyList()
 
