@@ -278,6 +278,8 @@ class WalletService : Service() {
             _lockedBalanceStateFlow.update { 0 }
         }
 
+        val isCreation = !WalletManager.walletExists(name) && restoreHeight == null
+
         val myWallet =
             if (WalletManager.walletExists(name)) {
                 val wallet = WalletManager.openWallet(name, password)
@@ -285,8 +287,10 @@ class WalletService : Service() {
                     Log.w("WalletService", "Unable to open wallet: ${wallet.status.error}")
                     Log.w("WalletService", "Deleting corrupted wallet cache for $name")
                     WalletManager.deleteCache(name)
+                    WalletManager.openWallet(name, password)
+                } else {
+                    wallet
                 }
-                WalletManager.openWallet(name, password)
             } else {
                 if (spendKey.isBlank()) {
                     WalletManager.createWallet(name, password)
@@ -304,7 +308,15 @@ class WalletService : Service() {
             _lockedBalanceStateFlow.update { myWallet.lockedBalance }
         }
 
-        connect(daemonAddress, daemonUsername, daemonPassword, proxy, restoreHeight)
+        connect(
+            daemonAddress,
+            daemonUsername,
+            daemonPassword,
+            proxy,
+            isCreation,
+            restoreHeight,
+            password,
+        )
         return myWallet
     }
 
@@ -314,9 +326,10 @@ class WalletService : Service() {
         password: String = "",
         proxy: String = "",
         restoreHeight: Long? = null,
+        walletPassword: String? = null,
     ): Wallet.Status? =
         synchronized(lock) {
-            connect(address, username, password, proxy)
+            connect(address, username, password, proxy, false, restoreHeight, walletPassword)
         }
 
     fun connect(
@@ -324,7 +337,9 @@ class WalletService : Service() {
         username: String = "",
         password: String = "",
         proxy: String = "",
+        isCreation: Boolean,
         restoreHeight: Long? = null,
+        walletPassword: String? = null,
     ): Wallet.Status? {
         checkNotInMainThread()
 
@@ -340,8 +355,16 @@ class WalletService : Service() {
                 return it.status
             }
 
-            restoreHeight?.let { height ->
+            if (isCreation) {
+                val height = it.estimateBlockchainHeight()
                 it.setRestoreHeight(height)
+                if (walletPassword != null) {
+                    it.setPassword(walletPassword)
+                }
+            } else {
+                restoreHeight?.let { height ->
+                    it.setRestoreHeight(height)
+                }
             }
 
             it.setListener(walletListener)
@@ -542,6 +565,12 @@ class WalletService : Service() {
             return wallet?.lastSubaddress(accountIndex)
         }
 
+    fun seedWithPassphrase(passphrase: String): String? {
+        synchronized(lock) {
+            return wallet?.seedWithPassphrase(passphrase)
+        }
+    }
+
     fun checkTxProof(
         txId: String,
         address: String,
@@ -556,6 +585,12 @@ class WalletService : Service() {
         synchronized(lock) {
             return wallet?.isAddressValid(address)
         }
+
+    fun getRestoreHeight(): Long? {
+        synchronized(lock) {
+            return wallet?.getRestoreHeight()
+        }
+    }
 
     override fun onCreate() {
     }

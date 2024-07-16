@@ -186,6 +186,7 @@ class Account(
     val keyPair: KeyPair,
     var moneroSpendKey: String? = null,
     var moneroSeed: String? = null,
+    var moneroRestoreHeight: Long = 0,
     var moneroPassword: String? = null,
     var moneroDaemonAddress: HostAndPort = Constants.defaultMoneroDaemon,
     var moneroDaemonUsername: String = "",
@@ -2807,6 +2808,7 @@ class Account(
         }
 
         moneroAddress = myWallet.address
+        moneroRestoreHeight = myWallet.getRestoreHeight()
         changeMoneroSeed(myWallet.seed)
 
         changeMoneroWallet(myWallet)
@@ -2833,6 +2835,10 @@ class Account(
 
     fun lastSubaddress(): Subaddress {
         return moneroWalletService?.lastSubaddress(0) ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun seedWithPassphrase(passphrase: String): String {
+        return moneroWalletService?.seedWithPassphrase(passphrase) ?: throw IllegalStateException("Monero service is null")
     }
 
     fun checkProof(
@@ -2970,7 +2976,7 @@ class Account(
         }
     }
 
-    fun setMoneroRestoreHeight(height: Long) {
+    fun setMoneroWalletRestoreHeight(height: Long) {
         val proxyString =
             proxy?.let {
                 // monero only supports SOCKS proxies
@@ -2993,6 +2999,10 @@ class Account(
                 moneroDaemonPassword,
                 proxyString ?: "",
             ) ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun getMoneroWalletRestoreHeight(): Long {
+        return moneroWalletService?.getRestoreHeight() ?: throw IllegalStateException("Monero service is null")
     }
 }
 

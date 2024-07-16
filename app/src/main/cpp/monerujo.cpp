@@ -796,6 +796,12 @@ Java_com_vitorpamplona_amethyst_model_Wallet_isWatchOnly(JNIEnv *env, jobject in
 }
 
 JNIEXPORT jlong JNICALL
+Java_com_vitorpamplona_amethyst_model_Wallet_estimateBlockchainHeight(JNIEnv *env, jobject instance) {
+    Monero::Wallet *wallet = getHandle<Monero::Wallet>(env, instance);
+    return wallet->estimateBlockChainHeight();
+}
+
+JNIEXPORT jlong JNICALL
 Java_com_vitorpamplona_amethyst_model_Wallet_getBlockChainHeight(JNIEnv *env, jobject instance) {
     Monero::Wallet *wallet = getHandle<Monero::Wallet>(env, instance);
     return wallet->blockChainHeight();
@@ -1643,5 +1649,4 @@ Java_com_vitorpamplona_amethyst_model_WalletManager_moneroVersion(JNIEnv *env, j
 #ifdef __cplusplus
 }
 #endif
-
 

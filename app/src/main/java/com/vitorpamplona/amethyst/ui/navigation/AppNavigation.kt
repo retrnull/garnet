@@ -219,7 +219,7 @@ fun AppNavigation(
         composable(Route.BlockedUsers.route, content = { HiddenUsersScreen(accountViewModel, nav) })
         composable(Route.Bookmarks.route, content = { BookmarkListScreen(accountViewModel, nav) })
         composable(Route.Drafts.route, content = { DraftListScreen(accountViewModel, nav) })
-        composable(Route.Monero.route, content = { MoneroScreen(moneroViewModel, nav) })
+        composable(Route.Monero.route, content = { MoneroScreen(accountViewModel, moneroViewModel, nav) })
 
         Route.Profile.let { route ->
             composable(

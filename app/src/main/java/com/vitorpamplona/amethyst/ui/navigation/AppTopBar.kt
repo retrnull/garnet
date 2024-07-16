@@ -266,7 +266,8 @@ private fun MoneroTopBar(
 
     if (showBackupSeedDialog) {
         BackupSeedDialog(
-            accountViewModel.account.moneroSeed!!,
+            accountViewModel = accountViewModel,
+            restoreHeight = accountViewModel.account.moneroRestoreHeight,
             onDismiss = {
                 showBackupSeedDialog = false
                 moreActionsExpanded = false
@@ -282,7 +283,7 @@ private fun MoneroTopBar(
                 moreActionsExpanded = false
             },
         ) {
-            scope.launch { accountViewModel.account.setMoneroRestoreHeight(it) }
+            scope.launch { accountViewModel.account.setMoneroWalletRestoreHeight(it) }
             showCustomRestoreHeightDialog = false
             moreActionsExpanded = false
         }

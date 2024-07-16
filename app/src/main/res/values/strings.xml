@@ -940,9 +940,17 @@
     <string name="monero_ephemeral_wallet_seed_backup_warning">You are logged in with an external signer or a public key. This makes it impossible to tie your Monero spend key to your Nostr private key.\n\nPlease back up your seed to avoid money loss.</string>
     <string name="monero_seed_copied_to_clipboard">Seed copied to clipboard</string>
     <string name="copy_my_seed">Copy my seed</string>
+    <string name="copy_restore_height">Copy restore height</string>
+    <string name="restore_height_copied_to_clipboard">Restore height copied to clipboard</string>
 
     <string name="backup_seed_dialog_description_1">Your seed is a unique sequence of words tied to your Monero private key that gives you access to your wallet.</string>
     <string name="backup_seed_dialog_description_2">By backing it up, you avoid losing your money if you lose your Nostr private key.</string>
+    <string name="backup_seed_dialog_description_restore_height">When restoring the wallet, you may be given an option to specify a restore height, which reduces the time it takes to sync the wallet.</string>
+    <string name="restore_height_with_height">Restore height: %1$s</string>
+    <string name="backup_seed_dialog_description_offset_passphrase">For additional security, you can specify an offset passphrase. The offset passphrase functions as an additional phrase which is required along with the seed in order to recover the wallet.</string>
 
     <string name="restore_height">Restore height</string>
+    <string name="offset_passphrase">Offset passphrase</string>
+    <string name="show_passphrase">Show Passphrase</string>
+    <string name="hide_passphrase">Hide Passphrase</string>
 </resources>

@@ -20,9 +20,13 @@
  */
 package com.vitorpamplona.amethyst.ui.screen.loggedIn
 
+import android.app.Activity
 import android.content.Context
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,14 +42,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -65,10 +73,12 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -80,6 +90,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -102,8 +114,10 @@ import com.vitorpamplona.amethyst.model.Wallet
 import com.vitorpamplona.amethyst.service.MoneroDataSource
 import com.vitorpamplona.amethyst.service.WalletService
 import com.vitorpamplona.amethyst.ui.actions.CloseButton
+import com.vitorpamplona.amethyst.ui.actions.LoadingAnimation
 import com.vitorpamplona.amethyst.ui.note.CloseIcon
 import com.vitorpamplona.amethyst.ui.note.TipButton
+import com.vitorpamplona.amethyst.ui.note.authenticate
 import com.vitorpamplona.amethyst.ui.note.decToPiconero
 import com.vitorpamplona.amethyst.ui.note.showMoneroAmount
 import com.vitorpamplona.amethyst.ui.qrcode.QrCodeDrawer
@@ -111,9 +125,11 @@ import com.vitorpamplona.amethyst.ui.theme.ButtonBorder
 import com.vitorpamplona.amethyst.ui.theme.ButtonPadding
 import com.vitorpamplona.amethyst.ui.theme.Size5dp
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MoneroViewModel(val account: Account) : ViewModel() {
     var daemonAddress: String by mutableStateOf(account.moneroDaemonAddress.host)
@@ -190,6 +206,7 @@ class MoneroViewModel(val account: Account) : ViewModel() {
 
 @Composable
 fun MoneroScreen(
+    accountViewModel: AccountViewModel,
     moneroViewModel: MoneroViewModel,
     nav: (String) -> Unit,
 ) {
@@ -240,7 +257,8 @@ fun MoneroScreen(
 
     if (showEphemeralWalletWarning) {
         EphemeralWalletWarning(
-            moneroViewModel.account.moneroSeed!!,
+            accountViewModel,
+            moneroViewModel.account.moneroRestoreHeight,
             onDismiss = { showEphemeralWalletWarning = false },
             onExplicitDismiss = {
                 moneroViewModel.account.changeIsMoneroSeedBackedUp(true)
@@ -248,7 +266,6 @@ fun MoneroScreen(
             },
             onBackedUp = {
                 moneroViewModel.account.changeIsMoneroSeedBackedUp(true)
-                showEphemeralWalletWarning = false
             },
         )
     }
@@ -1018,11 +1035,26 @@ fun SendDialog(
 
 @Composable
 fun BackupSeedDialog(
-    seed: String,
+    accountViewModel: AccountViewModel,
+    restoreHeight: Long,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope { Dispatchers.IO }
     val clipboardManager = LocalClipboardManager.current
+
+    var offsetPassphrase by remember { mutableStateOf("") }
+    var showCharsOffsetPassphrase by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
+
+    val keyguardLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+                result: ActivityResult ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                copySeed(context, scope, accountViewModel, clipboardManager, offsetPassphrase, onLoading = { loading = it })
+                accountViewModel.account.changeIsMoneroSeedBackedUp(true)
+            }
+        }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1030,7 +1062,9 @@ fun BackupSeedDialog(
     ) {
         Surface(
             tonalElevation = 1.dp,
-            modifier = Modifier.fillMaxSize(),
+            modifier =
+                Modifier.fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(Modifier.padding(10.dp)) {
@@ -1069,15 +1103,16 @@ fun BackupSeedDialog(
 
                         Button(
                             onClick = {
-                                clipboardManager.setText(AnnotatedString(seed))
-
-                                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.monero_seed_copied_to_clipboard),
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                }
+                                authenticate(
+                                    title = context.getString(R.string.copy_my_seed),
+                                    context = context,
+                                    keyguardLauncher = keyguardLauncher,
+                                    onApproved = {
+                                        copySeed(context, scope, accountViewModel, clipboardManager, offsetPassphrase, onLoading = { loading = it })
+                                        accountViewModel.account.changeIsMoneroSeedBackedUp(true)
+                                    },
+                                    onError = { title, message -> accountViewModel.toast(title, message) },
+                                )
                             },
                             shape = ButtonBorder,
                             colors =
@@ -1087,10 +1122,146 @@ fun BackupSeedDialog(
                             contentPadding = ButtonPadding,
                             modifier = Modifier.align(Alignment.CenterHorizontally),
                         ) {
+                            if (loading) {
+                                LoadingAnimation()
+                                Spacer(Modifier.width(10.dp))
+                            }
                             Text(stringResource(R.string.copy_my_seed))
                         }
+
+                        Spacer(Modifier.height(15.dp))
+
+                        Text(
+                            stringResource(R.string.backup_seed_dialog_description_restore_height),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+
+                        Spacer(Modifier.height(15.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                stringResource(R.string.restore_height_with_height, restoreHeight),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+
+                            Spacer(Modifier.width(2.dp))
+
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString("$restoreHeight"))
+
+                                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.restore_height_copied_to_clipboard),
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                },
+                                modifier =
+                                    Modifier.size(
+                                        with(LocalDensity.current) {
+                                            MaterialTheme.typography.bodyLarge.fontSize.toDp() + 3.dp
+                                        },
+                                    ),
+                            ) {
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    stringResource(R.string.copy_restore_height),
+                                    modifier =
+                                        Modifier.size(
+                                            with(LocalDensity.current) {
+                                                MaterialTheme.typography.bodyLarge.fontSize.toDp()
+                                            },
+                                        ),
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(15.dp))
+
+                        Text(
+                            stringResource(R.string.backup_seed_dialog_description_offset_passphrase),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = offsetPassphrase,
+                            onValueChange = {
+                                offsetPassphrase = it
+                            },
+                            label = { Text(stringResource(R.string.offset_passphrase)) },
+                            keyboardOptions =
+                                KeyboardOptions.Default.copy(
+                                    autoCorrect = false,
+                                    keyboardType = KeyboardType.Password,
+                                ),
+                            singleLine = true,
+                            visualTransformation = if (showCharsOffsetPassphrase) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                Row {
+                                    IconButton(onClick = { showCharsOffsetPassphrase = !showCharsOffsetPassphrase }) {
+                                        Icon(
+                                            imageVector =
+                                                if (showCharsOffsetPassphrase) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                            contentDescription =
+                                                if (showCharsOffsetPassphrase) {
+                                                    stringResource(R.string.show_passphrase)
+                                                } else {
+                                                    stringResource(
+                                                        R.string.hide_passphrase,
+                                                    )
+                                                },
+                                        )
+                                    }
+                                }
+                            },
+                        )
                     }
                 }
+            }
+        }
+    }
+}
+
+fun copySeed(
+    context: Context,
+    scope: CoroutineScope,
+    accountViewModel: AccountViewModel,
+    clipboardManager: ClipboardManager,
+    offsetPassphrase: String,
+    onLoading: (Boolean) -> Unit,
+) {
+    if (offsetPassphrase.isEmpty()) {
+        val seed = accountViewModel.account.moneroSeed!!
+        clipboardManager.setText(AnnotatedString(seed))
+
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.monero_seed_copied_to_clipboard),
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    } else {
+        onLoading(true)
+
+        scope.launch {
+            val seed = accountViewModel.account.seedWithPassphrase(offsetPassphrase)
+            clipboardManager.setText(AnnotatedString(seed))
+
+            withContext(Dispatchers.Main) {
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.monero_seed_copied_to_clipboard),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+
+                onLoading(false)
             }
         }
     }
@@ -1180,13 +1351,28 @@ fun CustomRestoreHeightDialog(
 
 @Composable
 fun EphemeralWalletWarning(
-    seed: String,
+    accountViewModel: AccountViewModel,
+    restoreHeight: Long,
     onDismiss: () -> Unit,
     onExplicitDismiss: () -> Unit,
     onBackedUp: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope { Dispatchers.IO }
     val clipboardManager = LocalClipboardManager.current
+
+    var offsetPassphrase by remember { mutableStateOf("") }
+    var showCharsOffsetPassphrase by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
+
+    val keyguardLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+                result: ActivityResult ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                copySeed(context, scope, accountViewModel, clipboardManager, offsetPassphrase, onLoading = { loading = it })
+                onBackedUp()
+            }
+        }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1197,7 +1383,8 @@ fun EphemeralWalletWarning(
     ) {
         Surface(
             Modifier
-                .fillMaxSize(),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(Modifier.padding(10.dp)) {
@@ -1229,17 +1416,16 @@ fun EphemeralWalletWarning(
 
                     Button(
                         onClick = {
-                            clipboardManager.setText(AnnotatedString(seed))
-
-                            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.monero_seed_copied_to_clipboard),
-                                    Toast.LENGTH_SHORT,
-                                ).show()
-                            }
-
-                            onBackedUp()
+                            authenticate(
+                                title = context.getString(R.string.copy_my_seed),
+                                context = context,
+                                keyguardLauncher = keyguardLauncher,
+                                onApproved = {
+                                    copySeed(context, scope, accountViewModel, clipboardManager, offsetPassphrase, onLoading = { loading = it })
+                                    onBackedUp()
+                                },
+                                onError = { title, message -> accountViewModel.toast(title, message) },
+                            )
                         },
                         shape = ButtonBorder,
                         colors =
@@ -1249,8 +1435,103 @@ fun EphemeralWalletWarning(
                         contentPadding = ButtonPadding,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     ) {
+                        if (loading) {
+                            LoadingAnimation()
+                            Spacer(Modifier.width(10.dp))
+                        }
                         Text(stringResource(R.string.copy_my_seed))
                     }
+
+                    Spacer(Modifier.height(15.dp))
+
+                    Text(
+                        stringResource(R.string.backup_seed_dialog_description_restore_height),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+
+                    Spacer(Modifier.height(15.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            stringResource(R.string.restore_height_with_height, restoreHeight),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+
+                        Spacer(Modifier.width(2.dp))
+
+                        IconButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString("$restoreHeight"))
+
+                                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.restore_height_copied_to_clipboard),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            },
+                            modifier =
+                                Modifier.size(
+                                    with(LocalDensity.current) {
+                                        MaterialTheme.typography.bodyLarge.fontSize.toDp() + 3.dp
+                                    },
+                                ),
+                        ) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                stringResource(R.string.copy_restore_height),
+                                modifier =
+                                    Modifier.size(
+                                        with(LocalDensity.current) {
+                                            MaterialTheme.typography.bodyLarge.fontSize.toDp()
+                                        },
+                                    ),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(15.dp))
+
+                    Text(
+                        stringResource(R.string.backup_seed_dialog_description_offset_passphrase),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = offsetPassphrase,
+                        onValueChange = {
+                            offsetPassphrase = it
+                        },
+                        label = { Text(stringResource(R.string.offset_passphrase)) },
+                        keyboardOptions =
+                            KeyboardOptions.Default.copy(
+                                autoCorrect = false,
+                                keyboardType = KeyboardType.Password,
+                            ),
+                        singleLine = true,
+                        visualTransformation = if (showCharsOffsetPassphrase) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            Row {
+                                IconButton(onClick = { showCharsOffsetPassphrase = !showCharsOffsetPassphrase }) {
+                                    Icon(
+                                        imageVector =
+                                            if (showCharsOffsetPassphrase) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                        contentDescription =
+                                            if (showCharsOffsetPassphrase) {
+                                                stringResource(R.string.show_passphrase)
+                                            } else {
+                                                stringResource(
+                                                    R.string.hide_passphrase,
+                                                )
+                                            },
+                                    )
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }

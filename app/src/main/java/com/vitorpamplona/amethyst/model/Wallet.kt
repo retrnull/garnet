@@ -203,6 +203,10 @@ class Wallet(val handle: Long) {
 
     private external fun getSeedJ(seedOffset: String = ""): String
 
+    fun seedWithPassphrase(passphrase: String): String {
+        return getSeedJ(passphrase)
+    }
+
     external fun getSubaddressLabel(
         accountIndex: Int,
         addressIndex: Int,
@@ -246,6 +250,8 @@ class Wallet(val handle: Long) {
 
     external fun getDisplayAmount(amount: Long): String
 
+    external fun estimateBlockchainHeight(): Long
+
     external fun getBlockChainHeight(): Long
 
     external fun getDaemonBlockChainHeight(): Long
@@ -260,11 +266,15 @@ class Wallet(val handle: Long) {
 
     external fun setRestoreHeight(height: Long)
 
+    external fun getRestoreHeight(): Long
+
     external fun pauseRefresh()
 
     external fun startRefresh()
 
     external fun rescanBlockchainAsync()
+
+    external fun setPassword(password: String): Boolean
 
     external fun nettype(): Int
 }
