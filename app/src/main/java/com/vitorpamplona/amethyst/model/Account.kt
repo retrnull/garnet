@@ -2829,7 +2829,7 @@ class Account(
         return moneroWalletService?.setProxy(proxy) ?: throw IllegalStateException("Monero service is null")
     }
 
-    fun newSubaddress(label: String): String {
+    fun newSubaddress(label: String = ""): String {
         return moneroWalletService?.newSubaddress(0, label) ?: throw IllegalStateException("Monero service is null")
     }
 

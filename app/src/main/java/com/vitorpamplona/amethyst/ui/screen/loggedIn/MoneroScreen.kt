@@ -52,11 +52,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -85,7 +87,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -212,6 +213,7 @@ fun MoneroScreen(
 ) {
     val account = moneroViewModel.account
     val moneroSendViewModel: MoneroSendViewModel = viewModel(factory = MoneroSendViewModel.Factory(account), key = "MoneroSendViewModel")
+    val scope = rememberCoroutineScope { Dispatchers.IO }
 
     val status by moneroViewModel.walletStatus.observeAsState(WalletService.WalletStatus(WalletService.WalletStatusType.OPENING, null))
     val connectionStatus by moneroViewModel.connectionStatus.observeAsState(Wallet.ConnectionStatus.DISCONNECTED)
@@ -222,6 +224,9 @@ fun MoneroScreen(
     var wantsToReceive by remember { mutableStateOf(false) }
     var wantsToSend by remember { mutableStateOf(false) }
     var showEphemeralWalletWarning by remember { mutableStateOf(!moneroViewModel.account.isMoneroSeedBackedUp) }
+
+    var moneroAddress by remember { mutableStateOf(account.moneroAddress) }
+    var generatingSubaddress by remember { mutableStateOf(false) }
 
     Column(
         modifier =
@@ -277,9 +282,22 @@ fun MoneroScreen(
     }
 
     if (wantsToReceive) {
-        ReceiveDialog(address = account.moneroAddress) {
-            wantsToReceive = false
-        }
+        ReceiveDialog(
+            address = moneroAddress,
+            generating = generatingSubaddress,
+            onNewSubaddress = {
+                generatingSubaddress = true
+                scope.launch {
+                    moneroAddress = account.newSubaddress()
+                    generatingSubaddress = false
+                }
+            },
+            onDismiss = {
+                generatingSubaddress = false
+                wantsToReceive = false
+                moneroAddress = account.moneroAddress
+            },
+        )
     }
 
     if (wantsToSend) {
@@ -671,6 +689,8 @@ fun EditDaemonDialog(
 @Composable
 fun ReceiveDialog(
     address: String,
+    generating: Boolean,
+    onNewSubaddress: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -682,7 +702,10 @@ fun ReceiveDialog(
     ) {
         Surface(
             tonalElevation = 1.dp,
-            modifier = Modifier.fillMaxSize(),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.padding(10.dp)) {
@@ -712,65 +735,52 @@ fun ReceiveDialog(
 
                     Spacer(Modifier.height(10.dp))
 
-                    Row(
-                        modifier =
-                            Modifier.clickable {
-                                clipboardManager.setText(AnnotatedString(address))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = address,
+                            singleLine = true,
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    clipboardManager.setText(AnnotatedString(address))
 
-                                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.monero_address_copied_to_clipboard),
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
+                                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.monero_address_copied_to_clipboard),
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                }) {
+                                    Icon(
+                                        Icons.Default.ContentCopy,
+                                        stringResource(R.string.copy_to_clipboard),
+                                    )
                                 }
                             },
-                    ) {
-                        Row(modifier = Modifier.weight(1f, fill = false)) {
-                            Text(
-                                address,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis,
-                                fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                        }
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
 
-                        IconButton(
-                            onClick = {
-                                clipboardManager.setText(AnnotatedString(address))
-
-                                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.monero_address_copied_to_clipboard),
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                }
-                            },
-                            modifier =
-                                Modifier.size(
-                                    with(LocalDensity.current) {
-                                        MaterialTheme.typography.bodyLarge.fontSize.toDp() + 3.dp
-                                    },
-                                ),
-                        ) {
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                contentDescription = stringResource(R.string.copy_to_clipboard),
-                                modifier =
-                                    Modifier.size(
-                                        with(LocalDensity.current) {
-                                            MaterialTheme.typography.bodyLarge.fontSize.toDp()
-                                        },
-                                    ),
-                            )
+                        if (!generating) {
+                            IconButton(onClick = { onNewSubaddress() }) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    stringResource(R.string.generate_new_subaddress),
+                                )
+                            }
+                        } else {
+                            Spacer(Modifier.width(10.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(30.dp))
                         }
                     }
 
                     Spacer(Modifier.height(10.dp))
 
-                    Text(stringResource(R.string.monero_fund_wallet_qrcode_description))
+                    Text(
+                        stringResource(R.string.monero_fund_wallet_qrcode_description),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
 
                     Spacer(Modifier.height(10.dp))
 
@@ -1063,7 +1073,8 @@ fun BackupSeedDialog(
         Surface(
             tonalElevation = 1.dp,
             modifier =
-                Modifier.fillMaxSize()
+                Modifier
+                    .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {

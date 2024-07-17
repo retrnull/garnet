@@ -925,6 +925,7 @@
     <string name="no_connection_to_monero_daemon">No connection to Monero daemon</string>
 
     <string name="monero_address_copied_to_clipboard">Monero address copied to clipboard</string>
+    <string name="generate_new_subaddress">Generate subaddress</string>
 
     <string name="send">Send</string>
     <string name="receive">Receive</string>
