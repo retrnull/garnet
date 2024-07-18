@@ -936,6 +936,8 @@
     <string name="invalid_height">Invalid height</string>
     <string name="invalid_monero_address">Invalid address</string>
     <string name="invalid_monero_amount">Invalid amount</string>
+    <string name="invalid_qr_code">Invalid QR Code</string>
+    <string name="invalid_monero_qr_code">Not a Monero QR code</string>
 
     <string name="warning">Warning</string>
     <string name="monero_ephemeral_wallet_seed_backup_warning">You are logged in with an external signer or a public key. This makes it impossible to tie your Monero spend key to your Nostr private key.\n\nPlease back up your seed to avoid money loss.</string>

@@ -22,6 +22,7 @@ package com.vitorpamplona.amethyst.ui.screen.loggedIn
 
 import android.app.Activity
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -52,6 +53,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -122,6 +124,7 @@ import com.vitorpamplona.amethyst.ui.note.authenticate
 import com.vitorpamplona.amethyst.ui.note.decToPiconero
 import com.vitorpamplona.amethyst.ui.note.showMoneroAmount
 import com.vitorpamplona.amethyst.ui.qrcode.QrCodeDrawer
+import com.vitorpamplona.amethyst.ui.qrcode.SimpleQrCodeScanner
 import com.vitorpamplona.amethyst.ui.theme.ButtonBorder
 import com.vitorpamplona.amethyst.ui.theme.ButtonPadding
 import com.vitorpamplona.amethyst.ui.theme.Size5dp
@@ -825,6 +828,27 @@ class MoneroSendViewModel(val account: Account) : ViewModel() {
     var sending by mutableStateOf(false)
     var sendError by mutableStateOf("")
 
+    fun updateFromUri(uri: String) {
+        reset()
+
+        var moneroUri = Uri.parse(uri)
+        if (moneroUri.scheme != "monero") {
+            throw IllegalArgumentException("Unsupported scheme")
+        }
+
+        // make it relative so the library doesn't complain when we try to parse the query parameters
+        moneroUri = Uri.parse(uri.removePrefix("monero:"))
+
+        address =
+            moneroUri.schemeSpecificPart
+                .split("?")
+                .first()
+
+        moneroUri.getQueryParameter("tx_amount")?.let {
+            amount = it
+        }
+    }
+
     fun validate(onValid: () -> Unit) {
         viewModelScope.launch {
             if (validateSync(address, amount)) {
@@ -921,7 +945,9 @@ fun SendDialog(
         label = "TransferProgressIndicator",
     )
 
-    if (moneroViewModel.sendError.isEmpty()) {
+    var qrError by remember { mutableStateOf(false) }
+
+    if (moneroViewModel.sendError.isEmpty() && !qrError) {
         Dialog(
             onDismissRequest = {
                 if (!moneroViewModel.sending) {
@@ -975,6 +1001,8 @@ fun SendDialog(
                             autoCorrect = false,
                         )
 
+                    var qrScanning by remember { mutableStateOf(false) }
+
                     OutlinedTextField(
                         value = moneroViewModel.address,
                         label = { Text(stringResource(R.string.address)) },
@@ -989,7 +1017,29 @@ fun SendDialog(
                             } else {
                                 null
                             },
+                        trailingIcon = {
+                            IconButton(onClick = { qrScanning = true }) {
+                                Icon(
+                                    Icons.Default.QrCode,
+                                    stringResource(R.string.accessibility_scan_qr_code),
+                                )
+                            }
+                        },
                     )
+
+                    if (qrScanning) {
+                        SimpleQrCodeScanner {
+                            qrScanning = false
+
+                            if (!it.isNullOrEmpty()) {
+                                try {
+                                    moneroViewModel.updateFromUri(it)
+                                } catch (e: Exception) {
+                                    qrError = true
+                                }
+                            }
+                        }
+                    }
 
                     Row {
                         OutlinedTextField(
@@ -1028,7 +1078,7 @@ fun SendDialog(
                 }
             }
         }
-    } else {
+    } else if (moneroViewModel.sendError.isNotEmpty()) {
         val text = "${moneroViewModel.sendError[0].uppercase()}${moneroViewModel.sendError.substring(1)}"
         AlertDialog(
             title = { Text(stringResource(R.string.error_dialog_transfer_error)) },
@@ -1039,6 +1089,13 @@ fun SendDialog(
             },
             onDismissRequest = { moneroViewModel.sendError = "" },
             confirmButton = { Button({ moneroViewModel.sendError = "" }) { Text(stringResource(android.R.string.ok)) } },
+        )
+    } else if (qrError) {
+        AlertDialog(
+            title = { Text(stringResource(R.string.invalid_qr_code)) },
+            text = { Text(stringResource(R.string.invalid_monero_qr_code)) },
+            onDismissRequest = { qrError = false },
+            confirmButton = { Button({ qrError = false }) { Text(stringResource(android.R.string.ok)) } },
         )
     }
 }
