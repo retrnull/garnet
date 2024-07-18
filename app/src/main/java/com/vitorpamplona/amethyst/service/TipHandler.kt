@@ -56,6 +56,16 @@ class TipHandler(val account: Account) {
         note.author?.let {
             it.info?.let { info ->
                 accountTipRecipient = info.moneroAddress()
+                if (accountTipRecipient == null) {
+                    info.about?.split(" ")?.let { tokens ->
+                        for (token in tokens) {
+                            if (token.length == 95 && account.moneroAddressIsValid(token)) {
+                                accountTipRecipient = token
+                                break
+                            }
+                        }
+                    }
+                }
                 accountPubKey = it.pubkeyHex
             }
         }

@@ -1168,13 +1168,11 @@ fun TipReaction(
                         baseNote,
                         accountViewModel,
                         context,
-                        onTippingProgress = { progress: Float -> scope.launch { tippingProgress = progress } },
+                        onTippingProgress = { progress: Float -> tippingProgress = progress },
                         onMultipleChoices = { wantsToTip = true },
                         onError = { _, message ->
-                            scope.launch {
-                                tippingProgress = 0f
-                                showErrorMessageDialog = showErrorMessageDialog + message
-                            }
+                            tippingProgress = 0f
+                            showErrorMessageDialog = showErrorMessageDialog + message
                         },
                     )
                 },
@@ -1198,12 +1196,10 @@ fun TipReaction(
                     wantsToChangeTipAmount = true
                 },
                 onError = { _, message ->
-                    scope.launch {
-                        tippingProgress = 0f
-                        showErrorMessageDialog = showErrorMessageDialog + message
-                    }
+                    tippingProgress = 0f
+                    showErrorMessageDialog = showErrorMessageDialog + message
                 },
-                onProgress = { scope.launch(Dispatchers.Main) { tippingProgress = it } },
+                onProgress = { tippingProgress = it },
             )
         }
 
@@ -1235,12 +1231,10 @@ fun TipReaction(
             TipCustomDialog(
                 onClose = { wantsToSetCustomTip = false },
                 onError = { _, message ->
-                    scope.launch {
-                        tippingProgress = 0f
-                        showErrorMessageDialog = showErrorMessageDialog + message
-                    }
+                    tippingProgress = 0f
+                    showErrorMessageDialog = showErrorMessageDialog + message
                 },
-                onProgress = { scope.launch(Dispatchers.Main) { tippingProgress = it } },
+                onProgress = { tippingProgress = it },
                 accountViewModel = accountViewModel,
                 baseNote = baseNote,
             )
