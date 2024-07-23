@@ -843,7 +843,7 @@ fun ReceiveDialog(
                                 IconButton(
                                     onClick = {
                                         generating = true
-                                        scope.launch {
+                                        scope.launch(Dispatchers.IO) {
                                             val address = account.newSubaddress()
                                             addresses += address
 
