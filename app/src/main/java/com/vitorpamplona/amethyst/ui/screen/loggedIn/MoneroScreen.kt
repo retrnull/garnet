@@ -29,8 +29,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -57,6 +62,7 @@ import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,9 +78,11 @@ import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,11 +90,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -113,6 +123,7 @@ import com.google.common.net.HostSpecifier
 import com.vitorpamplona.amethyst.Amethyst
 import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.model.Account
+import com.vitorpamplona.amethyst.model.Subaddress
 import com.vitorpamplona.amethyst.model.Wallet
 import com.vitorpamplona.amethyst.service.MoneroDataSource
 import com.vitorpamplona.amethyst.service.WalletService
@@ -127,7 +138,11 @@ import com.vitorpamplona.amethyst.ui.qrcode.QrCodeDrawer
 import com.vitorpamplona.amethyst.ui.qrcode.SimpleQrCodeScanner
 import com.vitorpamplona.amethyst.ui.theme.ButtonBorder
 import com.vitorpamplona.amethyst.ui.theme.ButtonPadding
+import com.vitorpamplona.amethyst.ui.theme.Font14SP
+import com.vitorpamplona.amethyst.ui.theme.Size24dp
 import com.vitorpamplona.amethyst.ui.theme.Size5dp
+import com.vitorpamplona.quartz.encoders.HexValidator
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -228,9 +243,6 @@ fun MoneroScreen(
     var wantsToSend by remember { mutableStateOf(false) }
     var showEphemeralWalletWarning by remember { mutableStateOf(!moneroViewModel.account.isMoneroSeedBackedUp) }
 
-    var moneroAddress by remember { mutableStateOf(account.moneroAddress) }
-    var generatingSubaddress by remember { mutableStateOf(false) }
-
     Column(
         modifier =
             Modifier
@@ -286,19 +298,9 @@ fun MoneroScreen(
 
     if (wantsToReceive) {
         ReceiveDialog(
-            address = moneroAddress,
-            generating = generatingSubaddress,
-            onNewSubaddress = {
-                generatingSubaddress = true
-                scope.launch {
-                    moneroAddress = account.newSubaddress()
-                    generatingSubaddress = false
-                }
-            },
+            account = account,
             onDismiss = {
-                generatingSubaddress = false
                 wantsToReceive = false
-                moneroAddress = account.moneroAddress
             },
         )
     }
@@ -689,15 +691,38 @@ fun EditDaemonDialog(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReceiveDialog(
-    address: String,
-    generating: Boolean,
-    onNewSubaddress: () -> Unit,
+    account: Account,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    var addresses by remember { mutableStateOf<List<Subaddress>>(listOf()) }
+    var generating by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            addresses =
+                account.listMoneroAddresses().filter { it.label.length != 64 || !HexValidator.isHex(it.label) }
+        }
+    }
+
+    var wantsToEditLabel by remember { mutableStateOf(false) }
+    var wantsToSelectAddress by remember { mutableStateOf(false) }
+
+    var selectedIndex by remember { mutableIntStateOf(0) }
+    var addressOptions =
+        addresses.map {
+            val title = it.label.ifEmpty { it.address }
+            val description = if (it.label.isNotEmpty()) it.address else null
+            TitleExplainer(
+                title,
+                description,
+            )
+        }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -738,57 +763,227 @@ fun ReceiveDialog(
 
                     Spacer(Modifier.height(10.dp))
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = address,
-                            singleLine = true,
-                            onValueChange = {},
-                            readOnly = true,
-                            trailingIcon = {
-                                IconButton(onClick = {
-                                    clipboardManager.setText(AnnotatedString(address))
+                    if (addresses.isNotEmpty()) {
+                        val selectedAddress = addresses[selectedIndex]
 
-                                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.monero_address_copied_to_clipboard),
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .clickable { wantsToSelectAddress = true }
+                                        .border(1.dp, Color.Gray, RoundedCornerShape(5.dp))
+                                        .padding(start = 15.dp)
+                                        .padding(vertical = 5.dp)
+                                        .weight(1f, fill = false)
+                                        .fillMaxWidth(),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f, fill = false).fillMaxWidth()) {
+                                        Text(
+                                            selectedAddress.address,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier =
+                                                Modifier
+                                                    .weight(1f, fill = false),
+                                        )
+
+                                        if (selectedAddress.label.isNotBlank()) {
+                                            Text(
+                                                "(${selectedAddress.label})",
+                                                softWrap = false,
+                                                overflow = TextOverflow.Clip,
+                                            )
+                                        }
                                     }
-                                }) {
+
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        stringResource(R.string.edit_address_label),
+                                        modifier =
+                                            Modifier
+                                                .combinedClickable(
+                                                    role = Role.Button,
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = rememberRipple(bounded = false, radius = Size24dp),
+                                                ) { wantsToEditLabel = true }
+                                                .padding(horizontal = 5.dp, vertical = 10.dp),
+                                    )
+
+                                    Spacer(Modifier.width(3.dp))
+
                                     Icon(
                                         Icons.Default.ContentCopy,
                                         stringResource(R.string.copy_to_clipboard),
+                                        modifier =
+                                            Modifier
+                                                .combinedClickable(
+                                                    role = Role.Button,
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = rememberRipple(bounded = false, radius = Size24dp),
+                                                ) {
+                                                    clipboardManager.setText(AnnotatedString(selectedAddress.address))
+
+                                                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+                                                        Toast.makeText(
+                                                            context,
+                                                            context.getString(R.string.monero_address_copied_to_clipboard),
+                                                            Toast.LENGTH_SHORT,
+                                                        ).show()
+                                                    }
+                                                }
+                                                .padding(horizontal = 5.dp, vertical = 10.dp),
+                                    )
+
+                                    Spacer(Modifier.width(10.dp))
+                                }
+                            }
+
+                            if (!generating) {
+                                IconButton(
+                                    onClick = {
+                                        generating = true
+                                        scope.launch {
+                                            val address = account.newSubaddress()
+                                            addresses += address
+
+                                            generating = false
+                                            selectedIndex = addresses.lastIndex
+                                        }
+                                    },
+                                ) {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        stringResource(R.string.generate_new_subaddress),
                                     )
                                 }
-                            },
-                            modifier = Modifier.weight(1f, fill = false),
+                            } else {
+                                Spacer(Modifier.width(10.dp))
+                                CircularProgressIndicator(modifier = Modifier.size(30.dp))
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        Text(
+                            stringResource(R.string.monero_fund_wallet_qrcode_description),
+                            style = MaterialTheme.typography.bodyLarge,
                         )
 
-                        if (!generating) {
-                            IconButton(onClick = { onNewSubaddress() }) {
-                                Icon(
-                                    Icons.Default.Refresh,
-                                    stringResource(R.string.generate_new_subaddress),
-                                )
-                            }
-                        } else {
-                            Spacer(Modifier.width(10.dp))
-                            CircularProgressIndicator(modifier = Modifier.size(30.dp))
-                        }
+                        Spacer(Modifier.height(10.dp))
+
+                        QrCodeDrawer(contents = "monero:${selectedAddress.address}", margin = 50f)
+                    } else {
+                        Text(stringResource(R.string.loading))
                     }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Text(
-                        stringResource(R.string.monero_fund_wallet_qrcode_description),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-
-                    Spacer(Modifier.height(10.dp))
-
-                    QrCodeDrawer(contents = "monero:$address", margin = 50f)
                 }
+            }
+        }
+    }
+
+    if (wantsToSelectAddress) {
+        SpinnerSelectionDialog(
+            options = addressOptions.toImmutableList(),
+            onDismiss = { wantsToSelectAddress = false },
+            onSelect = {
+                selectedIndex = it
+                wantsToSelectAddress = false
+            },
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    it.title,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            it.explainer?.let {
+                Spacer(Modifier.height(5.dp))
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        it,
+                        color = Color.Gray,
+                        fontSize = Font14SP,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+
+    if (wantsToEditLabel) {
+        if (addresses.isNotEmpty()) {
+            val selectedAddress = addresses[selectedIndex]
+            EditAddressLabelDialog(
+                currentLabel = selectedAddress.label,
+                onSave = {
+                    wantsToEditLabel = false
+                    val scope = Amethyst.instance.applicationIOScope
+                    scope.launch {
+                        account.setSubaddressLabel(selectedAddress.index, it)
+                        val newAddresses = addresses.toMutableList()
+                        newAddresses[selectedIndex] = newAddresses[selectedIndex].copy(label = it)
+                        addresses = newAddresses
+                    }
+                },
+                onDismiss = { wantsToEditLabel = false },
+            )
+        }
+    }
+}
+
+@Composable
+fun EditAddressLabelDialog(
+    currentLabel: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var label by remember { mutableStateOf(currentLabel) }
+
+    Dialog(
+        onDismissRequest = {
+            onDismiss()
+        },
+    ) {
+        Surface {
+            Column(Modifier.padding(10.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CloseButton(onPress = {
+                        onDismiss()
+                    })
+
+                    Button(
+                        onClick = { onSave(label) },
+                        shape = ButtonBorder,
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                            ),
+                    ) {
+                        Text(stringResource(R.string.save))
+                    }
+                }
+
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text(stringResource(R.string.label)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardActions = KeyboardActions(onDone = { onSave(label) }),
+                )
             }
         }
     }

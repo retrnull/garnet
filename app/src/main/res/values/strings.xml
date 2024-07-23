@@ -926,6 +926,9 @@
 
     <string name="monero_address_copied_to_clipboard">Monero address copied to clipboard</string>
     <string name="generate_new_subaddress">Generate subaddress</string>
+    <string name="loading">Loading…</string>
+    <string name="label">Label</string>
+    <string name="edit_address_label">Edit address label</string>
 
     <string name="send">Send</string>
     <string name="receive">Receive</string>

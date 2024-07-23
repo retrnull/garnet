@@ -20,4 +20,4 @@
  */
 package com.vitorpamplona.amethyst.model
 
-data class Subaddress(val address: String, val label: String)
+data class Subaddress(val address: String, val label: String, val index: Int)

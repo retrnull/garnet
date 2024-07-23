@@ -543,17 +543,29 @@ open class NewPostViewModel() : ViewModel() {
 
         val tipReceiver =
             if (wantsForwardTipTo) {
-                forwardTipTo.items.map {
-                    TipSplitSetup(
-                        it.key.pubkeyHex,
-                        it.key.relaysBeingUsed.keys.firstOrNull(),
-                        it.percentage.toDouble(),
-                        false,
-                    )
-                }
+                Account.TipDescription(
+                    forwardTipTo.items.map {
+                        TipSplitSetup(
+                            it.key.pubkeyHex,
+                            it.key.relaysBeingUsed.keys.firstOrNull(),
+                            it.percentage.toDouble(),
+                            false,
+                        )
+                    },
+                )
             } else {
-                account?.let {
-                    listOf(TipSplitSetup(it.newSubaddress(""), null, 1.0, true))
+                if (localDraft == null) {
+                    account?.let {
+                        val subaddress = it.newSubaddress("")
+                        Account.TipDescription(
+                            listOf(
+                                TipSplitSetup(subaddress.address, null, 1.0, true),
+                            ),
+                            subaddress.index,
+                        )
+                    }
+                } else {
+                    null
                 }
             }
 

@@ -113,6 +113,15 @@ class Wallet(val handle: Long) {
 
     private external fun storeJ(path: String)
 
+    fun getAddressWithIndex(
+        accountIndex: Int,
+        addressIndex: Int,
+    ): Subaddress {
+        val address = getAddressJ(accountIndex, addressIndex)
+        val label = getSubaddressLabel(accountIndex, addressIndex)
+        return Subaddress(address, label, addressIndex)
+    }
+
     fun createTransaction(
         destination: String,
         paymentId: String = "",
@@ -171,11 +180,12 @@ class Wallet(val handle: Long) {
     fun newSubaddress(
         accountIndex: Int = 0,
         label: String = "",
-    ): String {
+    ): Subaddress {
         synchronized(subaddressLock) {
             addSubaddress(accountIndex, label)
             val index = getNumSubaddresses(accountIndex) - 1
-            return getAddressJ(accountIndex, index)
+            val address = getAddressJ(accountIndex, index)
+            return Subaddress(address, label, index)
         }
     }
 
@@ -185,6 +195,7 @@ class Wallet(val handle: Long) {
             return Subaddress(
                 getAddressJ(accountIndex, index),
                 getSubaddressLabel(accountIndex, index),
+                index,
             )
         }
     }
@@ -211,6 +222,12 @@ class Wallet(val handle: Long) {
         accountIndex: Int,
         addressIndex: Int,
     ): String
+
+    external fun setSubaddressLabel(
+        accountIndex: Int,
+        addressIndex: Int,
+        label: String,
+    )
 
     fun checkTxProof(
         txId: String,

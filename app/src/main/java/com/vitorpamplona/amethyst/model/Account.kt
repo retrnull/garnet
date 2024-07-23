@@ -225,6 +225,11 @@ class Account(
 ) {
     var transientHiddenUsers: ImmutableSet<String> = persistentSetOf()
 
+    data class TipDescription(
+        val receivers: List<TipSplitSetup>,
+        val subaddressIndex: Int? = null,
+    )
+
     data class PaymentRequest(
         val relayUrl: String,
         val description: String,
@@ -1302,7 +1307,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
-        tipReceiver: List<TipSplitSetup>? = null,
+        tipReceiver: TipDescription? = null,
         relayList: List<Relay>? = null,
         geohash: String? = null,
         nip94attachments: List<Event>? = null,
@@ -1330,7 +1335,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
-            tipReceiver = tipReceiver,
+            tipReceiver = tipReceiver?.receivers,
             directMentions = directMentions,
             geohash = geohash,
             nip94attachments = nip94attachments,
@@ -1347,6 +1352,9 @@ class Account(
                     }
                 }
             } else {
+                tipReceiver?.subaddressIndex?.let { subaddressIndex ->
+                    setSubaddressLabel(subaddressIndex, it.id)
+                }
                 Client.send(it, relayList = relayList)
                 LocalCache.justConsume(it, null)
 
@@ -1368,7 +1376,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
-        tipReceiver: List<TipSplitSetup>? = null,
+        tipReceiver: TipDescription? = null,
         replyingTo: String?,
         root: String?,
         directMentions: Set<HexKey>,
@@ -1393,7 +1401,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
-            tipReceiver = tipReceiver,
+            tipReceiver = tipReceiver?.receivers,
             replyingTo = replyingTo,
             root = root,
             directMentions = directMentions,
@@ -1413,6 +1421,9 @@ class Account(
                     }
                 }
             } else {
+                tipReceiver?.subaddressIndex?.let { subaddressIndex ->
+                    setSubaddressLabel(subaddressIndex, it.id)
+                }
                 Client.send(it, relayList = relayList)
                 LocalCache.justConsume(it, null)
 
@@ -1454,7 +1465,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
-        tipReceiver: List<TipSplitSetup>? = null,
+        tipReceiver: TipDescription? = null,
         replyingTo: String?,
         root: String?,
         directMentions: Set<HexKey>,
@@ -1479,7 +1490,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
-            tipReceiver = tipReceiver,
+            tipReceiver = tipReceiver?.receivers,
             replyingTo = replyingTo,
             root = root,
             directMentions = directMentions,
@@ -1499,6 +1510,9 @@ class Account(
                     }
                 }
             } else {
+                tipReceiver?.subaddressIndex?.let { subaddressIndex ->
+                    setSubaddressLabel(subaddressIndex, it.id)
+                }
                 Client.send(it, relayList = relayList)
                 LocalCache.justConsume(it, null)
 
@@ -1614,7 +1628,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
-        tipReceiver: List<TipSplitSetup>? = null,
+        tipReceiver: TipDescription? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String?,
@@ -1632,7 +1646,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
-            tipReceiver = tipReceiver,
+            tipReceiver = tipReceiver?.receivers,
             geohash = geohash,
             nip94attachments = nip94attachments,
             signer = signer,
@@ -1648,6 +1662,9 @@ class Account(
                     }
                 }
             } else {
+                tipReceiver?.subaddressIndex?.let { subaddressIndex ->
+                    setSubaddressLabel(subaddressIndex, it.id)
+                }
                 Client.send(it)
                 LocalCache.justConsume(it, null)
             }
@@ -1662,7 +1679,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
-        tipReceiver: List<TipSplitSetup>? = null,
+        tipReceiver: TipDescription? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String?,
@@ -1681,7 +1698,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
-            tipReceiver = tipReceiver,
+            tipReceiver = tipReceiver?.receivers,
             geohash = geohash,
             nip94attachments = nip94attachments,
             signer = signer,
@@ -1697,6 +1714,9 @@ class Account(
                     }
                 }
             } else {
+                tipReceiver?.subaddressIndex?.let { subaddressIndex ->
+                    setSubaddressLabel(subaddressIndex, it.id)
+                }
                 Client.send(it)
                 LocalCache.justConsume(it, null)
             }
@@ -1711,7 +1731,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
-        tipReceiver: List<TipSplitSetup>? = null,
+        tipReceiver: TipDescription? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String?,
@@ -1739,7 +1759,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
-        tipReceiver: List<TipSplitSetup>? = null,
+        tipReceiver: TipDescription? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String?,
@@ -1758,7 +1778,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
-            tipReceiver = tipReceiver,
+            tipReceiver = tipReceiver?.receivers,
             geohash = geohash,
             nip94attachments = nip94attachments,
             signer = signer,
@@ -1775,6 +1795,9 @@ class Account(
                     }
                 }
             } else {
+                tipReceiver?.subaddressIndex?.let { subaddressIndex ->
+                    setSubaddressLabel(subaddressIndex, it.id)
+                }
                 Client.send(it)
                 LocalCache.consume(it, null)
             }
@@ -1790,7 +1813,7 @@ class Account(
         zapReceiver: List<ZapSplitSetup>? = null,
         wantsToMarkAsSensitive: Boolean,
         zapRaiserAmount: Long? = null,
-        tipReceiver: List<TipSplitSetup>? = null,
+        tipReceiver: TipDescription? = null,
         geohash: String? = null,
         nip94attachments: List<FileHeaderEvent>? = null,
         draftTag: String? = null,
@@ -1809,7 +1832,7 @@ class Account(
             zapReceiver = zapReceiver,
             markAsSensitive = wantsToMarkAsSensitive,
             zapRaiserAmount = zapRaiserAmount,
-            tipReceiver = tipReceiver,
+            tipReceiver = tipReceiver?.receivers,
             geohash = geohash,
             nip94attachments = nip94attachments,
             draftTag = draftTag,
@@ -1825,6 +1848,10 @@ class Account(
                     }
                 }
             } else {
+                tipReceiver?.subaddressIndex?.let { subaddressIndex ->
+                    val mine = it.wraps.firstOrNull { (it.recipientPubKey() == signer.pubKey) }
+                    mine?.let { event -> setSubaddressLabel(subaddressIndex, event.id) }
+                }
                 broadcastPrivately(it)
             }
         }
@@ -2829,12 +2856,16 @@ class Account(
         return moneroWalletService?.setProxy(proxy) ?: throw IllegalStateException("Monero service is null")
     }
 
-    fun newSubaddress(label: String = ""): String {
+    fun newSubaddress(label: String = ""): Subaddress {
         return moneroWalletService?.newSubaddress(0, label) ?: throw IllegalStateException("Monero service is null")
     }
 
     fun lastSubaddress(): Subaddress {
         return moneroWalletService?.lastSubaddress(0) ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun listMoneroAddresses(): List<Subaddress> {
+        return moneroWalletService?.listAddresses() ?: throw IllegalStateException("Monero service is null")
     }
 
     fun seedWithPassphrase(passphrase: String): String {
@@ -3003,6 +3034,13 @@ class Account(
 
     fun getMoneroWalletRestoreHeight(): Long {
         return moneroWalletService?.getRestoreHeight() ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun setSubaddressLabel(
+        index: Int,
+        label: String,
+    ) {
+        moneroWalletService?.setSubaddressLabel(index, label) ?: throw IllegalStateException("Monero service is null")
     }
 }
 

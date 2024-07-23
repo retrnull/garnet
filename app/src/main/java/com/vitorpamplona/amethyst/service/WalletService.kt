@@ -555,15 +555,45 @@ class WalletService : Service() {
     fun newSubaddress(
         accountIndex: Int,
         label: String,
-    ): String? =
+    ): Subaddress? =
         synchronized(lock) {
-            return wallet?.newSubaddress()
+            val subaddress = wallet?.newSubaddress()
+            store()
+            return subaddress
         }
 
     fun lastSubaddress(accountIndex: Int): Subaddress? =
         synchronized(lock) {
             return wallet?.lastSubaddress(accountIndex)
         }
+
+    fun listAddresses(): List<Subaddress>? =
+        synchronized(lock) {
+            return wallet?.let {
+                val addresses = mutableListOf<Subaddress>()
+                val numAddresses = it.getNumSubaddresses(0)
+                for (i in 0..<numAddresses) {
+                    val address = it.getAddressWithIndex(0, i)
+                    addresses += address
+                }
+                addresses
+            }
+        }
+
+    fun setSubaddressLabel(
+        index: Int,
+        label: String,
+    ): Wallet.Status? {
+        synchronized(lock) {
+            return wallet?.let {
+                it.setSubaddressLabel(0, index, label)
+                if (!it.status.isOk()) {
+                    return it.status
+                }
+                store()
+            }
+        }
+    }
 
     fun seedWithPassphrase(passphrase: String): String? {
         synchronized(lock) {
