@@ -85,6 +85,7 @@ import androidx.lifecycle.distinctUntilChanged
 import androidx.lifecycle.map
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vitorpamplona.amethyst.R
+import com.vitorpamplona.amethyst.model.Account
 import com.vitorpamplona.amethyst.model.Note
 import com.vitorpamplona.amethyst.model.User
 import com.vitorpamplona.amethyst.service.NostrChatroomDataSource
@@ -118,6 +119,7 @@ import com.vitorpamplona.amethyst.ui.theme.ZeroPadding
 import com.vitorpamplona.amethyst.ui.theme.placeholderText
 import com.vitorpamplona.quartz.events.ChatMessageEvent
 import com.vitorpamplona.quartz.events.ChatroomKey
+import com.vitorpamplona.quartz.events.TipSplitSetup
 import com.vitorpamplona.quartz.events.findURLs
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toPersistentList
@@ -373,12 +375,22 @@ private fun innerSendPost(
     val urls = findURLs(newPostModel.message.text)
     val usedAttachments = newPostModel.nip94attachments.filter { it.urls().intersect(urls.toSet()).isNotEmpty() }
 
+    val subaddress = accountViewModel.account.newSubaddress()
+    val tipReceiver =
+        Account.TipDescription(
+            listOf(
+                TipSplitSetup(subaddress.address, null, 1.0, true),
+            ),
+            subaddress.index,
+        )
+
     if (newPostModel.nip24 || room.users.size > 1 || replyTo.value?.event is ChatMessageEvent) {
         accountViewModel.account.sendNIP24PrivateMessage(
             message = newPostModel.message.text,
             toUsers = room.users.toList(),
             replyingTo = replyTo.value,
             mentions = null,
+            tipReceiver = tipReceiver,
             wantsToMarkAsSensitive = false,
             nip94attachments = usedAttachments,
             draftTag = dTag,
@@ -389,6 +401,7 @@ private fun innerSendPost(
             toUser = room.users.first(),
             replyingTo = replyTo.value,
             mentions = null,
+            tipReceiver = tipReceiver,
             wantsToMarkAsSensitive = false,
             nip94attachments = usedAttachments,
             draftTag = dTag,

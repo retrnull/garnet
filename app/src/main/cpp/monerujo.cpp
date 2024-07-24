@@ -38,7 +38,7 @@ static JavaVM *cachedJVM;
 static jclass class_String;
 static jclass class_ArrayList;
 static jclass class_WalletListener;
-//static jclass class_TransactionInfo;
+static jclass class_TransactionInfo;
 static jclass class_ProofInfo;
 static jclass class_Transfer;
 static jclass class_WalletStatus;
@@ -66,8 +66,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved) {
             jenv->FindClass("java/lang/String")));
     class_ArrayList = static_cast<jclass>(jenv->NewGlobalRef(
             jenv->FindClass("java/util/ArrayList")));
-    //class_TransactionInfo = static_cast<jclass>(jenv->NewGlobalRef(
-    //        jenv->FindClass("com/vitorpamplona/amethyst/model/TransactionInfo")));
+    class_TransactionInfo = static_cast<jclass>(jenv->NewGlobalRef(
+            jenv->FindClass("com/vitorpamplona/amethyst/model/TransactionInfo")));
     class_Transfer = static_cast<jclass>(jenv->NewGlobalRef(
             jenv->FindClass("com/vitorpamplona/amethyst/model/Transfer")));
     class_ProofInfo = static_cast<jclass>(jenv->NewGlobalRef(
@@ -153,6 +153,19 @@ struct MyWalletListener : Monero::WalletListener {
         if (jlistener == nullptr) return;
         LOGD("moneySpent %"
                      PRIu64, amount);
+        JNIEnv *jenv;
+        int envStat = attachJVM(&jenv);
+        if (envStat == JNI_ERR) return;
+
+        jstring _txid = jenv->NewStringUTF(txId.c_str());
+        jlong _amount = static_cast<jlong>(amount);
+
+        jmethodID listenerClass_moneySpent = jenv->GetMethodID(class_WalletListener, "moneySpent",
+                                                               "(Ljava/lang/String;J)V");
+        jenv->CallVoidMethod(jlistener, listenerClass_moneySpent, _txid, _amount);
+
+        jenv->DeleteLocalRef(_txid);
+        detachJVM(jenv, envStat);
     }
 
     /**
@@ -165,6 +178,19 @@ struct MyWalletListener : Monero::WalletListener {
         if (jlistener == nullptr) return;
         LOGD("moneyReceived %"
                      PRIu64, amount);
+        JNIEnv *jenv;
+        int envStat = attachJVM(&jenv);
+        if (envStat == JNI_ERR) return;
+
+        jstring _txid = jenv->NewStringUTF(txId.c_str());
+        jlong _amount = static_cast<jlong>(amount);
+
+        jmethodID listenerClass_moneyReceived = jenv->GetMethodID(class_WalletListener, "moneyReceived",
+                                                                  "(Ljava/lang/String;J)V");
+        jenv->CallVoidMethod(jlistener, listenerClass_moneyReceived, _txid, _amount);
+
+        jenv->DeleteLocalRef(_txid);
+        detachJVM(jenv, envStat);
     }
 
     /**
@@ -1428,11 +1454,11 @@ jobject newTransferList(JNIEnv *env, Monero::TransactionInfo *info) {
     return result;
 }
 
-/*
 jobject newTransactionInfo(JNIEnv *env, Monero::TransactionInfo *info) {
     jmethodID c = env->GetMethodID(class_TransactionInfo, "<init>",
-                                   "(IZZJJJLjava/lang/String;JLjava/lang/String;IIJJLjava/lang/String;Ljava/util/List;)V");
+                                   "(IZZJJJLjava/lang/String;Ljava/lang/String;JLjava/lang/String;IIJJLjava/lang/String;Ljava/util/List;)V");
     jobject transfers = newTransferList(env, info);
+    jstring _description = env->NewStringUTF(info->description().c_str());
     jstring _hash = env->NewStringUTF(info->hash().c_str());
     jstring _paymentId = env->NewStringUTF(info->paymentId().c_str());
     jstring _label = env->NewStringUTF(info->label().c_str());
@@ -1446,6 +1472,7 @@ jobject newTransactionInfo(JNIEnv *env, Monero::TransactionInfo *info) {
                                     static_cast<jlong> (info->amount()),
                                     static_cast<jlong> (info->fee()),
                                     static_cast<jlong> (info->blockHeight()),
+                                    _description,
                                     _hash,
                                     static_cast<jlong> (info->timestamp()),
                                     _paymentId,
@@ -1456,16 +1483,15 @@ jobject newTransactionInfo(JNIEnv *env, Monero::TransactionInfo *info) {
                                     _label,
                                     transfers);
     env->DeleteLocalRef(transfers);
+    env->DeleteLocalRef(_description);
     env->DeleteLocalRef(_hash);
     env->DeleteLocalRef(_paymentId);
     return result;
 }
- */
 
 #include <stdio.h>
 #include <stdlib.h>
 
-/*
 jobject
 transactionInfoArrayList(JNIEnv *env, const std::vector<Monero::TransactionInfo *> &vector,
                          uint32_t accountIndex) {
@@ -1484,9 +1510,7 @@ transactionInfoArrayList(JNIEnv *env, const std::vector<Monero::TransactionInfo 
     }
     return arrayList;
 }
- */
 
-/*
 JNIEXPORT jobject JNICALL
 Java_com_vitorpamplona_amethyst_model_TransactionHistory_refreshJ(JNIEnv *env, jobject instance,
                                                             jint accountIndex) {
@@ -1495,7 +1519,6 @@ Java_com_vitorpamplona_amethyst_model_TransactionHistory_refreshJ(JNIEnv *env, j
     history->refresh();
     return transactionInfoArrayList(env, history->getAll(), (uint32_t) accountIndex);
 }
- */
 
 // TransactionInfo is implemented in Java - no need here
 

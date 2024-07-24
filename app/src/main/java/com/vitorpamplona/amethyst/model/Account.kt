@@ -2912,6 +2912,7 @@ class Account(
         tips: List<TipSplitSetup>,
         amount: ULong,
         priority: TransactionPriority,
+        eventId: HexKey? = null,
     ): PendingTransaction {
         if (tips.isEmpty()) {
             throw IllegalArgumentException("Expected at least one tip")
@@ -2948,6 +2949,10 @@ class Account(
                     amounts.toTypedArray(),
                     priority,
                 )
+
+            if (eventId != null) {
+                it.setUserNote(transaction!!.txId, eventId)
+            }
         } ?: throw IllegalStateException("Monero service is null")
         return transaction!!
     }
@@ -3041,6 +3046,10 @@ class Account(
         label: String,
     ) {
         moneroWalletService?.setSubaddressLabel(index, label) ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun getMoneroTransactionHistory(): TransactionHistory {
+        return moneroWalletService?.getHistory() ?: throw IllegalStateException("Monero service is null")
     }
 }
 

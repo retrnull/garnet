@@ -102,6 +102,7 @@ import androidx.lifecycle.map
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.commons.richtext.MediaUrlVideo
+import com.vitorpamplona.amethyst.model.Account
 import com.vitorpamplona.amethyst.model.AddressableNote
 import com.vitorpamplona.amethyst.model.Channel
 import com.vitorpamplona.amethyst.model.LiveActivitiesChannel
@@ -160,6 +161,7 @@ import com.vitorpamplona.amethyst.ui.theme.placeholderText
 import com.vitorpamplona.quartz.events.EmptyTagList
 import com.vitorpamplona.quartz.events.LiveActivitiesEvent.Companion.STATUS_LIVE
 import com.vitorpamplona.quartz.events.Participant
+import com.vitorpamplona.quartz.events.TipSplitSetup
 import com.vitorpamplona.quartz.events.findURLs
 import com.vitorpamplona.quartz.events.toImmutableListOfLists
 import kotlinx.collections.immutable.ImmutableList
@@ -355,12 +357,22 @@ private suspend fun innerSendPost(
     val urls = findURLs(tagger.message)
     val usedAttachments = newPostModel.nip94attachments.filter { it.urls().intersect(urls.toSet()).isNotEmpty() }
 
+    val subaddress = accountViewModel.account.newSubaddress()
+    val tipReceiver =
+        Account.TipDescription(
+            listOf(
+                TipSplitSetup(subaddress.address, null, 1.0, true),
+            ),
+            subaddress.index,
+        )
+
     if (channel is PublicChatChannel) {
         accountViewModel.account.sendChannelMessage(
             message = tagger.message,
             toChannel = channel.idHex,
             replyTo = tagger.eTags,
             mentions = tagger.pTags,
+            tipReceiver = tipReceiver,
             wantsToMarkAsSensitive = false,
             nip94attachments = usedAttachments,
             draftTag = draftTag,
@@ -371,6 +383,7 @@ private suspend fun innerSendPost(
             toChannel = channel.address,
             replyTo = tagger.eTags,
             mentions = tagger.pTags,
+            tipReceiver = tipReceiver,
             wantsToMarkAsSensitive = false,
             nip94attachments = usedAttachments,
             draftTag = draftTag,

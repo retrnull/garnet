@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.timeout
 import kotlinx.coroutines.launch
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -173,7 +174,7 @@ object TipEventDataSource {
                                 // monero address
                                 recipientAddress = recipient
                             } else {
-                                recipientUser = getUser(recipient)
+                                recipientUser = getUser(recipient, USER_METADATA_TIMEOUT)
                                 if (recipientUser == null) {
                                     eventsToWatch += event
                                     continue
@@ -202,7 +203,7 @@ object TipEventDataSource {
                             var taggedEvent: Note? = null
                             if (taggedEventId != null) {
                                 try {
-                                    taggedEvent = getEvent(taggedEventId)
+                                    taggedEvent = getEvent(taggedEventId, EVENT_METADATA_TIMEOUT)
                                     if (taggedEvent == null) {
                                         foundTaggedEvent = false
                                     } else {
@@ -213,7 +214,7 @@ object TipEventDataSource {
                                                     recipientUser.pubkeyHex == it.addressOrPubKeyHex
                                                 } else {
                                                     try {
-                                                        val taggedEventRecipientUser = getUser(it.addressOrPubKeyHex)
+                                                        val taggedEventRecipientUser = getUser(it.addressOrPubKeyHex, USER_METADATA_TIMEOUT)
                                                         if (taggedEventRecipientUser == null) {
                                                             false
                                                         } else {
@@ -243,7 +244,7 @@ object TipEventDataSource {
                             if (!isInTipSplitSetup) {
                                 for (taggedUserId in taggedUsers) {
                                     try {
-                                        val taggedUser = getUser(taggedUserId)
+                                        val taggedUser = getUser(taggedUserId, USER_METADATA_TIMEOUT)
                                         if (taggedUser == null) {
                                             foundAllUsers = false
                                         } else {
@@ -321,43 +322,6 @@ object TipEventDataSource {
         job = null
     }
 
-    @OptIn(FlowPreview::class, DelicateCoroutinesApi::class)
-    private suspend fun getEvent(id: HexKey): Note? {
-        var note: Note? = LocalCache.getOrCreateNote(id)
-        // this needs to be executed in the main thread so livedata works.
-        GlobalScope.launch(Dispatchers.Main) {
-            note =
-                try {
-                    note!!.live().metadata.asFlow()
-                        .timeout(EVENT_METADATA_TIMEOUT)
-                        .catch { }
-                        .first { it.note.event != null }
-                        .note
-                } catch (e: NoSuchElementException) {
-                    null
-                }
-        }.join()
-        return note
-    }
-
-    @OptIn(FlowPreview::class, DelicateCoroutinesApi::class)
-    private suspend fun getUser(id: HexKey): User? {
-        var user: User? = LocalCache.getOrCreateUser(id)
-        GlobalScope.launch(Dispatchers.Main) {
-            user =
-                try {
-                    user!!.live().metadata.asFlow()
-                        .timeout(USER_METADATA_TIMEOUT)
-                        .catch { }
-                        .first { it.user.info != null }
-                        .user
-                } catch (e: NoSuchElementException) {
-                    null
-                }
-        }.join()
-        return user
-    }
-
     private val tipEventChannel: Channel<TipEvent> = Channel()
 
     private val combinedFlow = instantCombine(tipEventChannel.receiveAsFlow(), MoneroDataSource.walletHeight())
@@ -368,6 +332,49 @@ object TipEventDataSource {
             tipEventChannel.send(event)
         }
     }
+}
+
+@OptIn(FlowPreview::class, DelicateCoroutinesApi::class)
+suspend fun getEvent(
+    id: HexKey,
+    timeout: Duration,
+): Note? {
+    var note: Note? = LocalCache.getOrCreateNote(id)
+    // this needs to be executed in the main thread so livedata works.
+    GlobalScope.launch(Dispatchers.Main) {
+        note =
+            try {
+                note!!.live().metadata.asFlow()
+                    .timeout(timeout)
+                    .catch { }
+                    .first { it.note.event != null }
+                    .note
+            } catch (e: NoSuchElementException) {
+                null
+            }
+    }.join()
+    return note
+}
+
+@OptIn(FlowPreview::class, DelicateCoroutinesApi::class)
+suspend fun getUser(
+    id: HexKey,
+    timeout: Duration,
+): User? {
+    var user: User? = LocalCache.getOrCreateUser(id)
+    GlobalScope.launch(Dispatchers.Main) {
+        user =
+            try {
+                user!!.live().metadata.asFlow()
+                    .timeout(timeout)
+                    .catch { }
+                    .first { it.user.info != null }
+                    .user
+            } catch (e: NoSuchElementException) {
+                null
+            }
+    }.join()
+    return user
 }
 
 inline fun <reified T> instantCombine(vararg flows: Flow<T>) =

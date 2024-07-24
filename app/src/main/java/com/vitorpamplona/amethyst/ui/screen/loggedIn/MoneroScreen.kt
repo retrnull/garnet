@@ -48,6 +48,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
@@ -56,6 +58,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.QrCode
@@ -67,6 +71,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -75,6 +80,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProgressIndicatorDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -124,11 +130,15 @@ import com.vitorpamplona.amethyst.Amethyst
 import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.model.Account
 import com.vitorpamplona.amethyst.model.Subaddress
+import com.vitorpamplona.amethyst.model.TransactionDirection
+import com.vitorpamplona.amethyst.model.TransactionInfo
 import com.vitorpamplona.amethyst.model.Wallet
 import com.vitorpamplona.amethyst.service.MoneroDataSource
 import com.vitorpamplona.amethyst.service.WalletService
+import com.vitorpamplona.amethyst.service.getEvent
 import com.vitorpamplona.amethyst.ui.actions.CloseButton
 import com.vitorpamplona.amethyst.ui.actions.LoadingAnimation
+import com.vitorpamplona.amethyst.ui.navigation.routeFor
 import com.vitorpamplona.amethyst.ui.note.CloseIcon
 import com.vitorpamplona.amethyst.ui.note.TipButton
 import com.vitorpamplona.amethyst.ui.note.authenticate
@@ -142,6 +152,8 @@ import com.vitorpamplona.amethyst.ui.theme.Font14SP
 import com.vitorpamplona.amethyst.ui.theme.Size24dp
 import com.vitorpamplona.amethyst.ui.theme.Size5dp
 import com.vitorpamplona.quartz.encoders.HexValidator
+import com.vitorpamplona.quartz.encoders.hexToByteArray
+import com.vitorpamplona.quartz.encoders.toNEvent
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.CoroutineScope
@@ -149,6 +161,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
+import kotlin.time.Duration.Companion.seconds
 
 class MoneroViewModel(val account: Account) : ViewModel() {
     var daemonAddress: String by mutableStateOf(account.moneroDaemonAddress.host)
@@ -172,6 +190,17 @@ class MoneroViewModel(val account: Account) : ViewModel() {
         MoneroDataSource.lockedBalance()
             .map {
                 showMoneroAmount(it.toULong())
+            }
+            .asLiveData(Dispatchers.IO)
+    val tips =
+        MoneroDataSource.transactions()
+            .map {
+                it
+                    .filter {
+                        (it.subaddressLabel.length == 64 && HexValidator.isHex(it.subaddressLabel)) ||
+                            (it.description.length == 64 && HexValidator.isHex(it.description))
+                    }
+                    .sortedByDescending { it.timestamp }
             }
             .asLiveData(Dispatchers.IO)
 
@@ -237,42 +266,81 @@ fun MoneroScreen(
     val connectionStatus by moneroViewModel.connectionStatus.observeAsState(Wallet.ConnectionStatus.DISCONNECTED)
     val balance by moneroViewModel.balance.observeAsState("0")
     val lockedBalance by moneroViewModel.lockedBalance.observeAsState("0")
+    val tips: List<TransactionInfo> by moneroViewModel.tips.observeAsState(listOf())
 
     var wantsToEditDaemon by remember { mutableStateOf(false) }
     var wantsToReceive by remember { mutableStateOf(false) }
     var wantsToSend by remember { mutableStateOf(false) }
     var showEphemeralWalletWarning by remember { mutableStateOf(!moneroViewModel.account.isMoneroSeedBackedUp) }
 
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Scaffold(
+        modifier = Modifier.padding(top = 10.dp),
+        bottomBar = {
+            ActionsRow(
+                sendEnabled = connectionStatus == Wallet.ConnectionStatus.CONNECTED && status.type == WalletService.WalletStatusType.SYNCED,
+                onReceive = {
+                    wantsToReceive = true
+                },
+                onSend = {
+                    wantsToSend = true
+                },
+            )
+        },
     ) {
-        DaemonInfo(
-            account.moneroDaemonAddress.toString(),
-            status,
-            connectionStatus,
+        LazyColumn(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = it.calculateBottomPadding()),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            wantsToEditDaemon = true
+            item {
+                DaemonInfo(
+                    account.moneroDaemonAddress.toString(),
+                    status,
+                    connectionStatus,
+                ) {
+                    wantsToEditDaemon = true
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Balance(balance, lockedBalance)
+
+                Spacer(Modifier.height(15.dp))
+            }
+
+            itemsIndexed(tips) { i, it ->
+                Column(
+                    modifier =
+                        Modifier.clickable {
+                            val eventId =
+                                if (it.direction == TransactionDirection.IN.ordinal) {
+                                    it.subaddressLabel
+                                } else {
+                                    it.description
+                                }
+
+                            scope.launch(Dispatchers.IO) {
+                                val event = getEvent(eventId, 10.seconds)
+                                event?.let {
+                                    val route = routeFor(it, account.userProfile())
+                                    if (route != null) {
+                                        nav(route)
+                                    }
+                                }
+                            }
+                        },
+                ) {
+                    HorizontalDivider()
+                    Box(modifier = Modifier.padding(5.dp)) {
+                        TipInfo(it)
+                    }
+                    if (i == tips.lastIndex) {
+                        HorizontalDivider()
+                    }
+                }
+            }
         }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Balance(balance, lockedBalance)
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        ActionsRow(
-            sendEnabled = connectionStatus == Wallet.ConnectionStatus.CONNECTED && status.type == WalletService.WalletStatusType.SYNCED,
-            onReceive = {
-                wantsToReceive = true
-            },
-            onSend = {
-                wantsToSend = true
-            },
-        )
     }
 
     if (showEphemeralWalletWarning) {
@@ -515,6 +583,94 @@ fun Balance(
 
                 Spacer(modifier = Modifier.weight(0.75f))
             }
+        }
+    }
+}
+
+@Composable
+fun TipInfo(tip: TransactionInfo) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val prefix =
+                if (tip.direction == TransactionDirection.IN.ordinal) {
+                    Icons.AutoMirrored.Default.ArrowForward
+                } else {
+                    Icons.AutoMirrored.Default.ArrowBack
+                }
+
+            Icon(
+                prefix,
+                modifier =
+                    Modifier.size(
+                        with(LocalDensity.current) {
+                            MaterialTheme.typography.bodySmall.fontSize.toDp()
+                        },
+                    ),
+                contentDescription =
+                    if (tip.direction == TransactionDirection.IN.ordinal) {
+                        stringResource(R.string.incoming_tip)
+                    } else {
+                        stringResource(R.string.outgoing_tip)
+                    },
+            )
+
+            Spacer(Modifier.width(2.dp))
+
+            val eventId =
+                if (tip.direction == TransactionDirection.IN.ordinal) {
+                    tip.subaddressLabel
+                } else {
+                    tip.description
+                }
+            val displayableEventId = eventId.hexToByteArray().toNEvent()
+
+            Text(
+                displayableEventId,
+                modifier = Modifier.weight(1f),
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            val time =
+                DateTimeFormatter
+                    .ofLocalizedDateTime(FormatStyle.MEDIUM)
+                    .withLocale(Locale.getDefault())
+                    .withZone(ZoneId.systemDefault())
+                    .format(Instant.ofEpochSecond(tip.timestamp))
+            Text(
+                time,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                showMoneroAmount(tip.amount.toULong()),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f, fill = false),
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            Spacer(Modifier.width(3.dp))
+
+            Text(
+                "XMR",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+
+        if (tip.direction == TransactionDirection.IN.ordinal && tip.confirmations < 10) {
+            Text(
+                "${10 - tip.confirmations} blocks to unlock",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

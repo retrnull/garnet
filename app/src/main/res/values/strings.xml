@@ -959,4 +959,7 @@
     <string name="offset_passphrase">Offset passphrase</string>
     <string name="show_passphrase">Show Passphrase</string>
     <string name="hide_passphrase">Hide Passphrase</string>
+
+    <string name="incoming_tip">Incoming tip</string>
+    <string name="outgoing_tip">Outgoing tip</string>
 </resources>

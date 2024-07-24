@@ -98,7 +98,11 @@ class ChatMessageEvent(
             }
             zapRaiserAmount?.let { tags.add(arrayOf("zapraiser", "$it")) }
             tipReceiver?.forEach {
-                tags.add(arrayOf("monero", it.addressOrPubKeyHex, it.relay ?: "", it.weight.toString()))
+                if (it.isAddress) {
+                    tags.add(arrayOf("monero", it.addressOrPubKeyHex, it.weight.toString()))
+                } else {
+                    tags.add(arrayOf("monero", it.addressOrPubKeyHex, it.relay ?: "", it.weight.toString()))
+                }
             }
             geohash?.let { tags.addAll(geohashMipMap(it)) }
             subject?.let { tags.add(arrayOf("subject", it)) }

@@ -56,6 +56,11 @@ object MoneroDataSource {
             emitAll(moneroService.lockedBalanceStateFlow)
         }
 
+    fun transactions() =
+        flow {
+            emitAll(moneroService.transactions)
+        }
+
     fun setMoneroService(service: WalletService) {
         moneroService = service
     }

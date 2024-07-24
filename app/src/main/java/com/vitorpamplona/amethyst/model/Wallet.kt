@@ -80,6 +80,9 @@ class Wallet(val handle: Long) {
             return NetworkType.entries.first { it.ordinal == net }
         }
 
+    lateinit var transactionHistory: TransactionHistory
+        private set
+
     fun init(
         daemonAddress: String,
         upperTransactionSizeLimit: Long = 0,
@@ -88,6 +91,7 @@ class Wallet(val handle: Long) {
         proxyAddress: String = "",
     ) {
         initJ(daemonAddress, upperTransactionSizeLimit, daemonUsername, daemonPassword, proxyAddress)
+        transactionHistory = TransactionHistory(getHistoryJ())
     }
 
     private external fun initJ(
@@ -260,6 +264,17 @@ class Wallet(val handle: Long) {
         address: String,
         netType: Int = WalletManager.getNetworkType().ordinal,
     ): Boolean
+
+    fun refreshHistory() {
+        transactionHistory.refresh(0)
+    }
+
+    external fun setUserNote(
+        txId: String,
+        note: String,
+    ): Boolean
+
+    private external fun getHistoryJ(): Long
 
     external fun getBalanceAll(): Long
 

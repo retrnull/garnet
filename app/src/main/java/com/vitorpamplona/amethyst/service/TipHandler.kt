@@ -135,7 +135,7 @@ class TipHandler(val account: Account) {
 
         onProgress(0.50f)
 
-        val transaction = account.tip(tipsToSend, amount, priority)
+        val transaction = account.tip(tipsToSend, amount, priority, note.idHex)
         if (transaction.status.type != PendingTransaction.StatusType.OK) {
             val error = "${transaction.status.error[0].uppercase()}${transaction.status.error.substring(1)}"
             onError(

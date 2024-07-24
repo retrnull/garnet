@@ -33,6 +33,8 @@ import com.vitorpamplona.amethyst.model.PendingTransaction
 import com.vitorpamplona.amethyst.model.Proof
 import com.vitorpamplona.amethyst.model.ProofInfo
 import com.vitorpamplona.amethyst.model.Subaddress
+import com.vitorpamplona.amethyst.model.TransactionHistory
+import com.vitorpamplona.amethyst.model.TransactionInfo
 import com.vitorpamplona.amethyst.model.Wallet
 import com.vitorpamplona.amethyst.model.WalletManager
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.TransactionPriority
@@ -135,6 +137,9 @@ class WalletService : Service() {
     private val _connectionStatusStateFlow = MutableStateFlow(connectionStatus)
     val connectionStatusStateFlow = _connectionStatusStateFlow.asStateFlow()
 
+    private val _transactions = MutableStateFlow<List<TransactionInfo>>(listOf())
+    val transactions = _transactions.asStateFlow()
+
     val walletListener =
         object : MoneroWalletListener {
             val MIN_NEWBLOCK_DELAY: Duration = 500.milliseconds
@@ -150,6 +155,11 @@ class WalletService : Service() {
                     synchronized(lock) {
                         _balanceStateFlow.update { balance }
                         _lockedBalanceStateFlow.update { lockedBalance }
+
+                        wallet?.let {
+                            it.refreshHistory()
+                            _transactions.update { _ -> it.transactionHistory.transactions }
+                        }
                     }
                 }
             }
@@ -161,7 +171,12 @@ class WalletService : Service() {
                 scope.launch {
                     synchronized(lock) {
                         _balanceStateFlow.update { balance }
-                        _lockedBalanceStateFlow.update { balance }
+                        _lockedBalanceStateFlow.update { lockedBalance }
+
+                        wallet?.let {
+                            it.refreshHistory()
+                            _transactions.update { _ -> it.transactionHistory.transactions }
+                        }
                     }
                 }
             }
@@ -172,7 +187,7 @@ class WalletService : Service() {
             ) {
                 scope.launch {
                     synchronized(lock) {
-                        _lockedBalanceStateFlow.update { balance }
+                        _lockedBalanceStateFlow.update { lockedBalance }
                     }
                 }
             }
@@ -200,6 +215,11 @@ class WalletService : Service() {
                             _walletHeightStateFlow.update { wallet?.height ?: 0 }
                             _balanceStateFlow.update { wallet?.balance ?: 0 }
                             _lockedBalanceStateFlow.update { wallet?.lockedBalance ?: 0 }
+
+                            wallet?.let {
+                                it.refreshHistory()
+                                _transactions.update { _ -> it.transactionHistory.transactions }
+                            }
                         }
                     }
                 }
@@ -226,6 +246,11 @@ class WalletService : Service() {
 
                         _daemonHeightStateFlow.update { daemonHeight }
                         _connectionStatusStateFlow.update { connectionStatus }
+
+                        wallet?.let {
+                            it.refreshHistory()
+                            _transactions.update { _ -> it.transactionHistory.transactions }
+                        }
                     }
                 }
             }
@@ -411,6 +436,8 @@ class WalletService : Service() {
 
                 _balanceStateFlow.update { _ -> it.balance }
                 _lockedBalanceStateFlow.update { _ -> it.lockedBalance }
+                it.refreshHistory()
+                _transactions.update { _ -> it.transactionHistory.transactions }
 
                 pendingTransaction.status
             }
@@ -460,6 +487,8 @@ class WalletService : Service() {
 
                 _balanceStateFlow.update { _ -> it.balance }
                 _lockedBalanceStateFlow.update { _ -> it.lockedBalance }
+                it.refreshHistory()
+                _transactions.update { _ -> it.transactionHistory.transactions }
 
                 pendingTransaction
             }
@@ -619,6 +648,21 @@ class WalletService : Service() {
     fun getRestoreHeight(): Long? {
         synchronized(lock) {
             return wallet?.getRestoreHeight()
+        }
+    }
+
+    fun getHistory(): TransactionHistory? {
+        synchronized(lock) {
+            return wallet?.transactionHistory
+        }
+    }
+
+    fun setUserNote(
+        txId: String,
+        note: String,
+    ): Boolean? {
+        synchronized(lock) {
+            return wallet?.setUserNote(txId, note)
         }
     }
 
