@@ -163,7 +163,7 @@ val DefaultReactions =
 
 val DefaultZapAmounts = listOf(500L, 1000L, 5000L)
 
-val DefaultTipAmounts = listOf("0.05", "0.1", "0.5")
+val DefaultTipAmounts = listOf("0.002", "0.004", "0.008")
 
 fun getLanguagesSpokenByUser(): Set<String> {
     val languageList = ConfigurationCompat.getLocales(Resources.getSystem().getConfiguration())
