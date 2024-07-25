@@ -962,4 +962,7 @@
 
     <string name="incoming_tip">Incoming tip</string>
     <string name="outgoing_tip">Outgoing tip</string>
+    <string name="error_dialog_tip_error_not_enough_money">Not enough money to transfer, available only %1$s, transaction amount %2$s = %3$s + %4$s (fee)</string>
+    <string name="tip_with_external_wallet">Tip with an external wallet</string>
+    <string name="no_monero_wallets_available">No Monero wallets available</string>
 </resources>

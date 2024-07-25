@@ -99,6 +99,7 @@ class TipOptionsViewModel : ViewModel() {
 fun TipCustomDialog(
     onClose: () -> Unit,
     onError: (title: String, text: String) -> Unit,
+    onNotEnoughMoney: (Long, Long, Long) -> Unit,
     onProgress: (percent: Float) -> Unit,
     accountViewModel: AccountViewModel,
     baseNote: Note,
@@ -146,6 +147,7 @@ fun TipCustomDialog(
                                 postViewModel.customMessage.text,
                                 context,
                                 onError = onError,
+                                onNotEnoughMoney = onNotEnoughMoney,
                                 onProgress = onProgress,
                                 tipType = selectedTipType,
                                 priority = selectedTransactionPriority,

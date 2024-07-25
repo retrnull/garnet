@@ -1112,7 +1112,7 @@ Java_com_vitorpamplona_amethyst_model_Wallet_disposeTransaction(JNIEnv *env, job
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_vitorpamplona_amethyst_model_Wallet_estimateTransactionFee(JNIEnv *env, jobject instance,
+Java_com_vitorpamplona_amethyst_model_Wallet_estimateTransactionFeeJ(JNIEnv *env, jobject instance,
                                                               jobjectArray addresses,
                                                               jlongArray amounts,
                                                               jint priority) {

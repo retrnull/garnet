@@ -3051,6 +3051,18 @@ class Account(
     fun getMoneroTransactionHistory(): TransactionHistory {
         return moneroWalletService?.getHistory() ?: throw IllegalStateException("Monero service is null")
     }
+
+    fun getMoneroBalance(): Long {
+        return moneroWalletService?.balance ?: throw IllegalStateException("Monero service is null")
+    }
+
+    fun estimateMoneroTransactionFee(
+        addresses: Array<String>,
+        amounts: Array<Long>,
+        priority: TransactionPriority,
+    ): Long {
+        return moneroWalletService?.estimateTransactionFee(addresses, amounts, priority) ?: throw IllegalStateException("Monero service is null")
+    }
 }
 
 class AccountLiveData(private val account: Account) :

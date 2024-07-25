@@ -666,6 +666,16 @@ class WalletService : Service() {
         }
     }
 
+    fun estimateTransactionFee(
+        destinations: Array<String>,
+        amounts: Array<Long>,
+        priority: TransactionPriority,
+    ): Long? {
+        synchronized(lock) {
+            return wallet?.estimateTransactionFee(destinations, amounts, priority)
+        }
+    }
+
     override fun onCreate() {
     }
 

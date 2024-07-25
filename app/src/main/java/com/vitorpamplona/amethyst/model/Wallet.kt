@@ -269,6 +269,20 @@ class Wallet(val handle: Long) {
         transactionHistory.refresh(0)
     }
 
+    fun estimateTransactionFee(
+        addresses: Array<String>,
+        amounts: Array<Long>,
+        priority: TransactionPriority,
+    ): Long {
+        return estimateTransactionFeeJ(addresses, amounts.toLongArray(), priority.ordinal)
+    }
+
+    external fun estimateTransactionFeeJ(
+        addresses: Array<String>,
+        amounts: LongArray,
+        priority: Int,
+    ): Long
+
     external fun setUserNote(
         txId: String,
         note: String,

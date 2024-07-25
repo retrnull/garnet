@@ -21,6 +21,9 @@
 package com.vitorpamplona.amethyst.ui.note
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -41,6 +44,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,7 +52,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.ripple.rememberRipple
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,6 +66,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -91,6 +100,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.distinctUntilChanged
@@ -101,6 +111,7 @@ import coil.request.ImageRequest
 import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.model.Note
 import com.vitorpamplona.amethyst.service.ZapPaymentHandler
+import com.vitorpamplona.amethyst.service.getNoteTipRecipient
 import com.vitorpamplona.amethyst.ui.actions.NewPostView
 import com.vitorpamplona.amethyst.ui.components.GenericLoadable
 import com.vitorpamplona.amethyst.ui.components.InLineIconRenderer
@@ -120,6 +131,7 @@ import com.vitorpamplona.amethyst.ui.theme.ReactionRowZapraiserSize
 import com.vitorpamplona.amethyst.ui.theme.RowColSpacing
 import com.vitorpamplona.amethyst.ui.theme.Size0dp
 import com.vitorpamplona.amethyst.ui.theme.Size16Modifier
+import com.vitorpamplona.amethyst.ui.theme.Size16dp
 import com.vitorpamplona.amethyst.ui.theme.Size17Modifier
 import com.vitorpamplona.amethyst.ui.theme.Size19Modifier
 import com.vitorpamplona.amethyst.ui.theme.Size20Modifier
@@ -127,6 +139,7 @@ import com.vitorpamplona.amethyst.ui.theme.Size20dp
 import com.vitorpamplona.amethyst.ui.theme.Size22Modifier
 import com.vitorpamplona.amethyst.ui.theme.Size24dp
 import com.vitorpamplona.amethyst.ui.theme.Size75dp
+import com.vitorpamplona.amethyst.ui.theme.StdHorzSpacer
 import com.vitorpamplona.amethyst.ui.theme.TinyBorders
 import com.vitorpamplona.amethyst.ui.theme.mediumImportanceLink
 import com.vitorpamplona.amethyst.ui.theme.placeholderText
@@ -142,6 +155,7 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
@@ -1150,6 +1164,7 @@ fun TipReaction(
     var wantsToChangeTipAmount by remember { mutableStateOf(false) }
     var wantsToSetCustomTip by remember { mutableStateOf(false) }
     var showErrorMessageDialog by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showNotEnoughMoneyDialog by remember { mutableStateOf<Triple<Long, Long, Long>?>(null) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1173,6 +1188,9 @@ fun TipReaction(
                         onError = { _, message ->
                             tippingProgress = 0f
                             showErrorMessageDialog = showErrorMessageDialog + message
+                        },
+                        onNotEnoughMoney = { available, required, fee ->
+                            showNotEnoughMoneyDialog = Triple(available, required, fee)
                         },
                     )
                 },
@@ -1199,6 +1217,9 @@ fun TipReaction(
                     tippingProgress = 0f
                     showErrorMessageDialog = showErrorMessageDialog + message
                 },
+                onNotEnoughMoney = { available, required, fee ->
+                    showNotEnoughMoneyDialog = Triple(available, required, fee)
+                },
                 onProgress = { tippingProgress = it },
             )
         }
@@ -1220,6 +1241,88 @@ fun TipReaction(
             )
         }
 
+        if (showNotEnoughMoneyDialog != null) {
+            showNotEnoughMoneyDialog?.let {
+                val (available, required, fee) = it
+                AlertDialog(
+                    onDismissRequest = {
+                        showNotEnoughMoneyDialog = null
+                        tippingProgress = 1f
+                    },
+                    title = { Text(stringResource(R.string.error_dialog_tip_error)) },
+                    text = {
+                        SelectionContainer {
+                            Text(
+                                stringResource(
+                                    R.string.error_dialog_tip_error_not_enough_money,
+                                    showMoneroAmount(available.toULong()),
+                                    showMoneroAmount((required + fee).toULong()),
+                                    showMoneroAmount(required.toULong()),
+                                    showMoneroAmount(fee.toULong()),
+                                ),
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            TextButton(onClick = {
+                                scope.launch(Dispatchers.IO) {
+                                    try {
+                                        val recipient =
+                                            getNoteTipRecipient(
+                                                baseNote, accountViewModel.account,
+                                            ).first.maxByOrNull { it.weight ?: 0.0 } ?: return@launch
+
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("monero:${recipient.addressOrPubKeyHex}?tx_amount=${showMoneroAmount(required.toULong())}"))
+                                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
+                                        ContextCompat.startActivity(context, intent, null)
+                                        tippingProgress = 1f
+
+                                        showNotEnoughMoneyDialog = null
+                                    } catch (e: Exception) {
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(
+                                                context,
+                                                context.getString(R.string.no_monero_wallets_available),
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                        }
+
+                                        tippingProgress = 1f
+                                        showNotEnoughMoneyDialog = null
+                                    }
+                                }
+                            }) {
+                                Text(stringResource(R.string.tip_with_external_wallet))
+                            }
+                            Button(
+                                onClick = {
+                                    showNotEnoughMoneyDialog = null
+                                    tippingProgress = 1f
+                                },
+                                contentPadding = PaddingValues(horizontal = Size16dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Done,
+                                        contentDescription = null,
+                                    )
+                                    Spacer(StdHorzSpacer)
+                                    Text(stringResource(R.string.error_dialog_button_ok))
+                                }
+                            }
+                        }
+                    },
+                )
+            }
+        }
+
         if (wantsToChangeTipAmount) {
             UpdateTipAmountDialog(
                 onClose = { wantsToChangeTipAmount = false },
@@ -1233,6 +1336,9 @@ fun TipReaction(
                 onError = { _, message ->
                     tippingProgress = 0f
                     showErrorMessageDialog = showErrorMessageDialog + message
+                },
+                onNotEnoughMoney = { available, required, fee ->
+                    showNotEnoughMoneyDialog = Triple(available, required, fee)
                 },
                 onProgress = { tippingProgress = it },
                 accountViewModel = accountViewModel,
@@ -1327,6 +1433,7 @@ fun tipClick(
     onTippingProgress: (Float) -> Unit,
     onMultipleChoices: () -> Unit,
     onError: (String, String) -> Unit,
+    onNotEnoughMoney: (Long, Long, Long) -> Unit,
 ) {
     if (baseNote.isDraft()) {
         accountViewModel.toast(
@@ -1353,6 +1460,7 @@ fun tipClick(
             "",
             context,
             onError = onError,
+            onNotEnoughMoney = onNotEnoughMoney,
             onProgress = { onTippingProgress(it) },
             tipType = accountViewModel.account.defaultTipType,
             priority = accountViewModel.account.defaultMoneroTransactionPriority,
@@ -1783,6 +1891,7 @@ fun TipAmountChoicePopup(
     onDismiss: () -> Unit,
     onChangeAmount: () -> Unit,
     onError: (title: String, text: String) -> Unit,
+    onNotEnoughMoney: (Long, Long, Long) -> Unit,
     onProgress: (percent: Float) -> Unit,
 ) {
     val context = LocalContext.current
@@ -1805,6 +1914,7 @@ fun TipAmountChoicePopup(
                             "",
                             context,
                             onError,
+                            onNotEnoughMoney,
                             onProgress,
                             accountViewModel.account.defaultTipType,
                             accountViewModel.account.defaultMoneroTransactionPriority,
@@ -1837,6 +1947,7 @@ fun TipAmountChoicePopup(
                                         "",
                                         context,
                                         onError,
+                                        onNotEnoughMoney,
                                         onProgress,
                                         accountViewModel.account.defaultTipType,
                                         accountViewModel.account.defaultMoneroTransactionPriority,
