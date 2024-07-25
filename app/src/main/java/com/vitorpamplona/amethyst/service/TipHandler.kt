@@ -170,7 +170,7 @@ fun getNoteTipRecipient(
         it.info?.let { info ->
             accountTipRecipient = info.moneroAddress()
             if (accountTipRecipient == null) {
-                info.about?.split(" ")?.let { tokens ->
+                info.about?.split("\\s+".toRegex())?.let { tokens ->
                     for (token in tokens) {
                         if (token.length == 95 && account.moneroAddressIsValid(token)) {
                             accountTipRecipient = token
