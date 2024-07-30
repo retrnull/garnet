@@ -56,3 +56,7 @@ ln -s ~/monero ~/garnet/external-libs/monero
 ```
 
 Start docker and run `make`. Then, build the APK in Android Studio.
+
+## Donations
+
+Monero address: 8A7LStrTLTTfGMBmLYCfBC9BUtVZuLZA3hdQe6TnKBGzA3SKzXz8innAgjNAZn1o3Ed3mpSCSJWQH2x1Y1Us1k9BBmHx4AA
