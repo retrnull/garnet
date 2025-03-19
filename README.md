@@ -42,7 +42,8 @@ git clone https://github.com/retrnull/garnet.git
 Clone the Monero fork repository and switch to the correct branch
 ```bash
 git clone https://github.com/retrnull/monero.git
-git checkout v0.18.3.3-garnet
+cd monero
+git checkout release-v0.18.3.3-garnet
 ```
 
 Update submodules
