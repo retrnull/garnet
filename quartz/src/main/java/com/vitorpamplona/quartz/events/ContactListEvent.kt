@@ -435,6 +435,8 @@ class UserMetadata {
         return lud16 ?: lud06
     }
 
+    var simplex: String? = null
+
     fun moneroAddress(): String? {
         return cryptoAddresses?.get("monero")
     }
@@ -463,6 +465,7 @@ class UserMetadata {
         if (banner?.isNotEmpty() == true) banner = banner?.trim()
         if (website?.isNotEmpty() == true) website = website?.trim()
         if (domain?.isNotEmpty() == true) domain = domain?.trim()
+        if (simplex?.isNotEmpty() == true) simplex = simplex?.trim()
 
         if (picture?.isBlank() == true) picture = null
         if (nip05?.isBlank() == true) nip05 = null
@@ -475,6 +478,7 @@ class UserMetadata {
         if (banner?.isBlank() == true) banner = null
         if (website?.isBlank() == true) website = null
         if (domain?.isBlank() == true) domain = null
+        if (simplex?.isBlank() == true) simplex = null
     }
 }
 

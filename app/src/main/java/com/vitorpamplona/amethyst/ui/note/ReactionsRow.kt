@@ -124,6 +124,7 @@ import com.vitorpamplona.amethyst.ui.theme.Font14SP
 import com.vitorpamplona.amethyst.ui.theme.HalfDoubleVertSpacer
 import com.vitorpamplona.amethyst.ui.theme.Height24dpModifier
 import com.vitorpamplona.amethyst.ui.theme.ModifierWidth3dp
+import com.vitorpamplona.amethyst.ui.theme.MoneroOrange
 import com.vitorpamplona.amethyst.ui.theme.NoSoTinyBorders
 import com.vitorpamplona.amethyst.ui.theme.ReactionRowExpandButton
 import com.vitorpamplona.amethyst.ui.theme.ReactionRowHeight
@@ -226,7 +227,21 @@ private fun InnerReactionRow(
             ZapReaction(baseNote, MaterialTheme.colorScheme.placeholderText, accountViewModel, nav = nav)
         },
         six = {
-            TipReaction(baseNote, MaterialTheme.colorScheme.placeholderText, accountViewModel, nav = nav)
+            val author = baseNote.author
+            val authorState = author?.live()?.metadata?.observeAsState()
+
+            val hasMoneroAddress =
+                remember(authorState?.value) {
+                    !author?.info?.moneroAddress().isNullOrBlank()
+                }
+            val tipTintColor =
+                if (hasMoneroAddress) {
+                    MoneroOrange
+                } else {
+                    MaterialTheme.colorScheme.placeholderText
+                }
+
+            TipReaction(baseNote, tipTintColor, accountViewModel, nav = nav)
         },
         seven = {
             ViewCountReaction(

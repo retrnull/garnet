@@ -260,6 +260,22 @@ fun NewUserMetadataView(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     OutlinedTextField(
+                        label = { Text(text = "SimpleX") },
+                        modifier = Modifier.fillMaxWidth(),
+                        value = postViewModel.simplex.value,
+                        onValueChange = { postViewModel.simplex.value = it },
+                        placeholder = {
+                            Text(
+                                text = "simplex:/...",
+                                color = MaterialTheme.colorScheme.placeholderText,
+                            )
+                        },
+                        singleLine = true,
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
                         label = { Text(text = stringResource(R.string.twitter)) },
                         modifier = Modifier.fillMaxWidth(),
                         value = postViewModel.twitter.value,

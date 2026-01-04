@@ -54,6 +54,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -1115,6 +1116,9 @@ private fun DrawAdditionalInfo(
     val moneroAddress = remember { baseUser.info?.moneroAddress() }
     DisplayMoneroAddress(address = moneroAddress, userHex = pubkeyHex, accountViewModel = accountViewModel, nav)
 
+    val simplex = remember { baseUser.info?.simplex }
+    DisplaySimpleXAddress(address = simplex, accountViewModel = accountViewModel)
+
     val identities = user.latestMetadata?.identityClaims()
     if (!identities.isNullOrEmpty()) {
         identities.forEach { identity: IdentityClaim ->
@@ -1323,6 +1327,40 @@ fun DisplayMoneroAddress(
                     onError = { title, message -> accountViewModel.toast(title, message) },
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun DisplaySimpleXAddress(
+    address: String?,
+    accountViewModel: AccountViewModel,
+) {
+    val uri = LocalUriHandler.current
+
+    if (!address.isNullOrEmpty()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Default.Message,
+                contentDescription = "SimpleX",
+                modifier = Size16Modifier,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+
+            ClickableText(
+                text = AnnotatedString(address),
+                onClick = {
+                    val finalUri = if (address.startsWith("simplex:") || address.startsWith("http")) address else "simplex:$address"
+                    runCatching { uri.openUri(finalUri) }
+                },
+                style = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.primary),
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                modifier =
+                    Modifier
+                        .padding(top = 1.dp, bottom = 1.dp, start = 5.dp)
+                        .weight(1f),
+            )
         }
     }
 }
